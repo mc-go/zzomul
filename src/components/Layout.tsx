@@ -7,6 +7,7 @@ import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import Avatar from './Avatar';
 import ProfileEditor from './ProfileEditor';
+import DevInfo from './DevInfo';
 
 const linkBase =
   'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors';
@@ -137,6 +138,8 @@ export default function Layout() {
           }}
         />
       ) : null}
+
+      <DevInfo />
     </div>
   );
 }

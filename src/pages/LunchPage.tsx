@@ -265,7 +265,7 @@ function WishlistSection({
                   </div>
                   <RestaurantTitle name={item.restaurant} link={item.link} />
                   {item.menu ? (
-                    <p className="text-sm text-ink-600 mt-0.5">{item.menu}</p>
+                    <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{item.menu}</p>
                   ) : null}
                   <div className="border-t border-ink-100 my-3" />
                   {item.participants.length > 0 ? (
@@ -382,7 +382,7 @@ function DoneSection({
                   </div>
                   <RestaurantTitle name={lunch.restaurant} link={lunch.link} />
                   {lunch.menu ? (
-                    <p className="text-sm text-ink-600 mt-0.5">{lunch.menu}</p>
+                    <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{lunch.menu}</p>
                   ) : null}
                   <div className="border-t border-ink-100 my-3" />
                   {lunch.comment ? (
@@ -656,12 +656,12 @@ function RecordForm({
         </Field>
 
         <Field label={isWishlist ? '메뉴/노트 (선택)' : '메뉴'}>
-          <input
-            type="text"
+          <textarea
             value={menu}
             onChange={(e) => setMenu(e.target.value)}
-            placeholder={isWishlist ? '예: 파스타 유명한 곳' : '예: 로제 떡볶이'}
-            className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
+            placeholder={isWishlist ? '예: 파스타 유명한 곳\n여러 줄도 가능해요' : '예: 로제 떡볶이'}
+            rows={isWishlist ? 3 : 2}
+            className="w-full px-3 py-2 rounded-md border border-ink-200 text-sm placeholder-ink-300 resize-none"
           />
         </Field>
 
