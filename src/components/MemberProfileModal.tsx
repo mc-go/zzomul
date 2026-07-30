@@ -67,7 +67,7 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
           ) : null}
 
           <div className="w-full mt-6 pt-5 border-t border-ink-100">
-            <p className="text-[10px] font-medium text-ink-400 tracking-wide uppercase mb-2">
+            <p className="text-sm font-medium text-ink-500 mb-2">
               오늘의 상태
             </p>
             {statusMessage ? (
