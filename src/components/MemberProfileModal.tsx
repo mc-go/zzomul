@@ -66,14 +66,16 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
             </p>
           ) : null}
 
-          <div className="w-full mt-6 pt-4 border-t border-ink-100">
-            <p className="text-[10px] font-medium text-ink-400 tracking-wide uppercase mb-1.5">
+          <div className="w-full mt-6 pt-5 border-t border-ink-100">
+            <p className="text-[10px] font-medium text-ink-400 tracking-wide uppercase mb-2">
               오늘의 상태
             </p>
             {statusMessage ? (
-              <p className="text-sm text-ink-700 leading-relaxed">{statusMessage}</p>
+              <p className="text-lg text-ink-900 font-medium leading-relaxed whitespace-pre-wrap">
+                {statusMessage}
+              </p>
             ) : (
-              <p className="text-xs text-ink-300">아직 남긴 메시지가 없어요</p>
+              <p className="text-sm text-ink-300">아직 남긴 메시지가 없어요</p>
             )}
           </div>
         </div>
