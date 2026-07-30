@@ -15,14 +15,17 @@ type Props = {
 };
 
 export default function MemberProfileModal({ empNo, date, record, onClose }: Props) {
-  const { getProfileByEmpNo } = useProfiles();
+  const { getProfileByEmpNo, getStatus } = useProfiles();
   const { resolveName } = useAppData();
 
   const profile = getProfileByEmpNo(empNo);
   const name = resolveName(empNo);
   const kind = record ? kindFor(record.attendanceStatus) : 'other';
   const label = record ? labelFor(record.attendanceStatus) : '기록 없음';
-  const statusMessage = profile?.statusMessage ?? '';
+  const dateStr = date
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    : '';
+  const statusMessage = dateStr ? getStatus(empNo, dateStr) : '';
   const scheduleTime = record?.scheduleTime ?? '';
 
   return (
@@ -68,14 +71,14 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
 
           <div className="w-full mt-6 pt-5 border-t border-ink-100">
             <p className="text-sm font-medium text-ink-500 mb-2">
-              오늘의 상태
+              {date ? '이 날의 상태' : '오늘의 상태'}
             </p>
             {statusMessage ? (
               <p className="text-lg text-ink-900 font-medium leading-relaxed whitespace-pre-wrap">
                 {statusMessage}
               </p>
             ) : (
-              <p className="text-sm text-ink-300">아직 남긴 메시지가 없어요</p>
+              <p className="text-sm text-ink-300">이 날엔 남긴 메시지가 없어요</p>
             )}
           </div>
         </div>

@@ -15,10 +15,11 @@ type Props = {
 };
 
 export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
-  const { getProfileByEmpNo } = useProfiles();
+  const { getProfileByEmpNo, getStatus } = useProfiles();
   const { resolveName } = useAppData();
 
   const dateLabel = format(date, 'yyyy년 M월 d일 (EEE)', { locale: ko });
+  const dateStr = format(date, 'yyyy-MM-dd');
 
   return (
     <>
@@ -60,7 +61,7 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
             const name = resolveName(empNo);
             const kind = record ? kindFor(record.attendanceStatus) : 'other';
             const label = record ? labelFor(record.attendanceStatus) : '기록 없음';
-            const statusMessage = profile?.statusMessage ?? '';
+            const statusMessage = getStatus(empNo, dateStr);
 
             return (
               <div

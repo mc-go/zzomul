@@ -16,19 +16,23 @@ const linkActive = 'text-ink-900 bg-ink-100';
 
 export default function Layout() {
   const { session, logout } = useAuth();
-  const { getProfile, save } = useProfiles();
+  const { getProfile, save, saveStatus, getStatus } = useProfiles();
   const { myEmpNo, resolveName } = useAppData();
   const [editing, setEditing] = useState(false);
 
   const profileId = session?.userId ? String(session.userId) : '';
   const myProfile = profileId ? getProfile(profileId) : null;
-  // Auto-detected empNo가 있으면 프로필에 아직 저장 안 됐어도 미리 사용
   const effectiveEmpNo = myProfile?.empNo || myEmpNo || '';
   const displayName = effectiveEmpNo ? resolveName(effectiveEmpNo) : (session?.username ?? '');
 
-  // ProfileEditor 초기값: 프로필에 empNo가 없으면 자동 감지값으로 프리필
+  // 오늘자 상태 메시지 (daily_statuses에서 조회)
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todaysStatus = effectiveEmpNo ? getStatus(effectiveEmpNo, todayStr) : '';
+
+  // ProfileEditor 초기값: 오늘자 상태 메시지로 프리필
   const editorInitial = myProfile
-    ? { ...myProfile, empNo: myProfile.empNo || myEmpNo || '' }
+    ? { ...myProfile, empNo: myProfile.empNo || myEmpNo || '', statusMessage: todaysStatus }
     : myEmpNo
       ? {
           id: profileId,
@@ -37,7 +41,7 @@ export default function Layout() {
           iconKey: 'user',
           colorKey: 'slate',
           photo: '',
-          statusMessage: '',
+          statusMessage: todaysStatus,
           statusDate: null,
           updatedAt: '',
         }
@@ -132,8 +136,12 @@ export default function Layout() {
           displayName={displayName}
           initial={editorInitial}
           onClose={() => setEditing(false)}
-          onSubmit={async (update) => {
-            await save(profileId, { ...update, email: session?.username });
+          onSubmit={async ({ statusMessage, ...profileUpdate }) => {
+            await save(profileId, { ...profileUpdate, email: session?.username });
+            const empNoForStatus = profileUpdate.empNo || myEmpNo || '';
+            if (empNoForStatus) {
+              await saveStatus(empNoForStatus, todayStr, statusMessage);
+            }
             setEditing(false);
           }}
         />
