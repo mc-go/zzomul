@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
 import { LuCode, LuX, LuExternalLink } from 'react-icons/lu';
 
-const STORAGE_KEY = 'zzomul.devinfo.dismissed.v1';
-
 export default function DevInfo() {
   const [open, setOpen] = useState(false);
-  const [hidden, setHidden] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
 
   useEffect(() => {
     if (!open) return;
@@ -21,17 +12,6 @@ export default function DevInfo() {
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
   }, [open]);
-
-  function dismiss() {
-    try {
-      localStorage.setItem(STORAGE_KEY, '1');
-    } catch {
-      // ignore
-    }
-    setHidden(true);
-  }
-
-  if (hidden) return null;
 
   return (
     <>
@@ -173,14 +153,7 @@ export default function DevInfo() {
               </Section>
             </div>
 
-            <footer className="flex items-center justify-between px-4 py-2.5 border-t border-ink-100 bg-ink-50/40">
-              <button
-                type="button"
-                onClick={dismiss}
-                className="text-[11px] text-ink-400 hover:text-ink-900"
-              >
-                다시 안 보기
-              </button>
+            <footer className="flex items-center justify-end px-4 py-2.5 border-t border-ink-100 bg-ink-50/40">
               <button
                 type="button"
                 onClick={() => setOpen(false)}

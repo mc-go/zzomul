@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuPlus, LuTrash2, LuX, LuCheck, LuPencil, LuExternalLink } from 'react-icons/lu';
+import {
+  LuPlus,
+  LuTrash2,
+  LuX,
+  LuCheck,
+  LuPencil,
+  LuExternalLink,
+  LuChevronDown,
+  LuChevronRight,
+} from 'react-icons/lu';
 import StarRating from '../components/StarRating';
 import {
   createLunch,
@@ -190,6 +199,8 @@ export default function LunchPage() {
   );
 }
 
+const WISHLIST_COLLAPSE_KEY = 'zzomul.wishlist.collapsed.v1';
+
 function WishlistSection({
   records,
   onAdd,
@@ -207,13 +218,41 @@ function WishlistSection({
   memberName: (id: string) => string;
   getProfile: (id: string) => import('../lib/profiles').Profile | null;
 }) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(WISHLIST_COLLAPSE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(WISHLIST_COLLAPSE_KEY, next ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <section>
       <header className="flex items-center justify-between mb-3">
-        <div className="flex items-baseline gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-baseline gap-2 hover:opacity-70 transition-opacity"
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? (
+            <LuChevronRight className="text-ink-400 self-center" />
+          ) : (
+            <LuChevronDown className="text-ink-400 self-center" />
+          )}
           <h2 className="text-base font-semibold tracking-tight">가고싶은</h2>
           <span className="text-xs text-ink-400">{records.length}건</span>
-        </div>
+        </button>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -234,7 +273,7 @@ function WishlistSection({
         </div>
       </header>
 
-      {records.length === 0 ? (
+      {collapsed ? null : records.length === 0 ? (
         <div className="rounded-lg border border-dashed border-ink-200 py-8 px-6 text-center">
           <p className="text-xs text-ink-400">아직 없어요. 가보고 싶은 곳을 추가해 보세요.</p>
         </div>
