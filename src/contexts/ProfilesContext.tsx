@@ -9,6 +9,7 @@ import {
 import {
   ensureStatusesSchema,
   listStatuses,
+  todayString,
   upsertStatus,
   type DailyStatus,
 } from '../lib/statuses';
@@ -105,8 +106,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getStatus = useCallback(
-    (empNo: string, date: string): string => statuses[statusKey(empNo, date)] ?? '',
-    [statuses],
+    (empNo: string, date: string): string => {
+      const direct = statuses[statusKey(empNo, date)];
+      if (direct) return direct;
+      // Fallback: 이전 스키마의 profiles.status_message가 오늘자면 보여줌
+      // (daily_statuses로 아직 마이그레이션 안 된 기존 데이터 대응)
+      if (date === todayString()) {
+        const profile = byEmpNo[empNo];
+        if (profile?.statusMessage && profile.statusDate === date) {
+          return profile.statusMessage;
+        }
+      }
+      return '';
+    },
+    [statuses, byEmpNo],
   );
 
   const value = useMemo<ProfilesValue>(
