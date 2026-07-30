@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LuCalendarDays, LuUtensils, LuLogOut, LuUserCog } from 'react-icons/lu';
+import { LuCalendarDays, LuUtensils, LuLogOut } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import Avatar from './Avatar';
 import ProfileEditor from './ProfileEditor';
-import MePicker from './MePicker';
 
 const linkBase =
   'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors';
@@ -17,13 +16,31 @@ const linkActive = 'text-ink-900 bg-ink-100';
 export default function Layout() {
   const { session, logout } = useAuth();
   const { getProfile, save } = useProfiles();
-  const { me, setMe, resolveName } = useAppData();
+  const { myEmpNo, resolveName } = useAppData();
   const [editing, setEditing] = useState(false);
 
-  const profileId = me ?? '';
+  const profileId = session?.userId ? String(session.userId) : '';
   const myProfile = profileId ? getProfile(profileId) : null;
-  const displayName = me ? resolveName(me) : (session?.empNm ?? session?.username ?? '');
-  const showPicker = !!session && !me;
+  // Auto-detected empNo가 있으면 프로필에 아직 저장 안 됐어도 미리 사용
+  const effectiveEmpNo = myProfile?.empNo || myEmpNo || '';
+  const displayName = effectiveEmpNo ? resolveName(effectiveEmpNo) : (session?.username ?? '');
+
+  // ProfileEditor 초기값: 프로필에 empNo가 없으면 자동 감지값으로 프리필
+  const editorInitial = myProfile
+    ? { ...myProfile, empNo: myProfile.empNo || myEmpNo || '' }
+    : myEmpNo
+      ? {
+          id: profileId,
+          empNo: myEmpNo,
+          email: session?.username ?? '',
+          iconKey: 'user',
+          colorKey: 'slate',
+          photo: '',
+          statusMessage: '',
+          statusDate: null,
+          updatedAt: '',
+        }
+      : null;
 
   return (
     <div className="min-h-full flex flex-col">
@@ -55,27 +72,16 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => (me ? setEditing(true) : setMe(null))}
-              className="flex items-center gap-2 h-10 pl-1 pr-2.5 rounded-full hover:bg-ink-50 transition-colors"
-              title={me ? '프로필 편집' : '본인 선택'}
+              onClick={() => profileId && setEditing(true)}
+              disabled={!profileId}
+              className="flex items-center gap-2 h-10 pl-1 pr-2.5 rounded-full hover:bg-ink-50 transition-colors disabled:opacity-50"
+              title="내 프로필 편집"
             >
-              <Avatar profile={myProfile} size="sm" fallbackText={displayName} />
-              <span className="hidden sm:inline text-xs text-ink-500 max-w-[120px] truncate">
-                {displayName}
+              <Avatar profile={myProfile} size="sm" fallbackText={session?.username} />
+              <span className="hidden sm:inline text-xs text-ink-500 max-w-[140px] truncate">
+                {session?.username}
               </span>
             </button>
-            {me ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('본인 선택을 다시 하시겠어요?')) setMe(null);
-                }}
-                className="inline-flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-900 px-2 py-1.5 rounded-md hover:bg-ink-50"
-                title="본인 다시 선택"
-              >
-                <LuUserCog className="text-sm" />
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={logout}
@@ -123,16 +129,14 @@ export default function Layout() {
         <ProfileEditor
           profileId={profileId}
           displayName={displayName}
-          initial={myProfile}
+          initial={editorInitial}
           onClose={() => setEditing(false)}
           onSubmit={async (update) => {
-            await save(profileId, update);
+            await save(profileId, { ...update, email: session?.username });
             setEditing(false);
           }}
         />
       ) : null}
-
-      {showPicker ? <MePicker /> : null}
     </div>
   );
 }

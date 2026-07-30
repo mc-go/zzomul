@@ -49,14 +49,19 @@ export function collectNames(records: AttendanceRecord[]): Record<string, string
 }
 
 export type EmployeeRecord = {
+  empId: number;
   empNo: string;
   empNm: string;
   orgNm: string;
   posNm: string;
 };
 
+export async function fetchEmployees(token: string): Promise<EmployeeRecord[]> {
+  return apiGet<EmployeeRecord[]>('/attendance/employees', token);
+}
+
 export async function fetchTrackedNames(token: string): Promise<Record<string, string>> {
-  const all = await apiGet<EmployeeRecord[]>('/attendance/employees', token);
+  const all = await fetchEmployees(token);
   const map: Record<string, string> = {};
   for (const emp of all) {
     if ((MEMBER_EMPNOS as readonly string[]).includes(emp.empNo)) {

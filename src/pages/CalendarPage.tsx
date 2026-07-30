@@ -36,7 +36,7 @@ const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function CalendarPage() {
   const { session, logout } = useAuth();
-  const { getProfile } = useProfiles();
+  const { getProfileByEmpNo } = useProfiles();
   const { resolveName } = useAppData();
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -92,41 +92,8 @@ export default function CalendarPage() {
     [monthStart, monthEnd],
   );
 
-  const hasAnyStatus = MEMBER_EMPNOS.some((emp) => (getProfile(emp)?.statusMessage ?? '').length > 0);
-
   return (
     <div>
-      {hasAnyStatus ? (
-        <section className="mb-6">
-          <h2 className="text-[11px] font-medium text-ink-400 mb-2 tracking-wide uppercase">오늘의 상태</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {MEMBER_EMPNOS.map((emp) => {
-              const profile = getProfile(emp);
-              const name = resolveName(emp);
-              const msg = profile?.statusMessage ?? '';
-              const todayKey = format(new Date(), 'yyyy-MM-dd');
-              const todayRecord = byMember[emp]?.[todayKey] ?? null;
-              return (
-                <button
-                  key={emp}
-                  type="button"
-                  onClick={() => setSelected({ empNo: emp, date: new Date(), record: todayRecord })}
-                  className="flex items-center gap-2.5 rounded-lg border border-ink-100 bg-white px-3 py-2 hover:border-ink-200 hover:bg-ink-50/40 transition-colors text-left"
-                >
-                  <Avatar profile={profile} size="sm" fallbackText={name} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-ink-700 truncate">{name}</p>
-                    <p className="text-[11px] text-ink-500 truncate">
-                      {msg || <span className="text-ink-300">·</span>}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
       <div className="mb-5">
         <h1 className="text-xl font-semibold tracking-tight">
           {format(cursor, 'yyyy년 M월', { locale: ko })}
@@ -220,7 +187,7 @@ export default function CalendarPage() {
                           const kind = record ? kindFor(record.attendanceStatus) : 'other';
                           const label = record ? labelFor(record.attendanceStatus) : '';
                           const name = resolveName(empNo);
-                          const profile = getProfile(empNo);
+                          const profile = getProfileByEmpNo(empNo);
                           return (
                             <li
                               key={empNo}
@@ -276,7 +243,7 @@ export default function CalendarPage() {
                       const kind = record ? kindFor(record.attendanceStatus) : 'other';
                       const label = record ? labelFor(record.attendanceStatus) : '';
                       const name = resolveName(empNo);
-                      const profile = getProfile(empNo);
+                      const profile = getProfileByEmpNo(empNo);
                       return (
                         <li
                           key={empNo}

@@ -15,10 +15,10 @@ type Props = {
 };
 
 export default function MemberProfileModal({ empNo, date, record, onClose }: Props) {
-  const { getProfile } = useProfiles();
+  const { getProfileByEmpNo } = useProfiles();
   const { resolveName } = useAppData();
 
-  const profile = getProfile(empNo);
+  const profile = getProfileByEmpNo(empNo);
   const name = resolveName(empNo);
   const kind = record ? kindFor(record.attendanceStatus) : 'other';
   const label = record ? labelFor(record.attendanceStatus) : '기록 없음';

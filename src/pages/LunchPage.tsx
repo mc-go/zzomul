@@ -35,9 +35,10 @@ type PromoteFormRequest = { kind: 'promote'; lunch: Lunch };
 type FormRequest = AddFormRequest | EditFormRequest | PromoteFormRequest | null;
 
 export default function LunchPage() {
-  useAuth();
-  const { getProfile } = useProfiles();
-  const { me, resolveName } = useAppData();
+  const { session } = useAuth();
+  const { getProfileByEmpNo } = useProfiles();
+  const { resolveName } = useAppData();
+  const me = session?.userId ? String(session.userId) : '';
   const [lunches, setLunches] = useState<Lunch[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +131,7 @@ export default function LunchPage() {
             onEdit={(lunch) => setForm({ kind: 'edit', lunch })}
             onDelete={handleDelete}
             memberName={memberName}
-            getProfile={getProfile}
+            getProfile={getProfileByEmpNo}
           />
 
           <DoneSection
@@ -140,7 +141,7 @@ export default function LunchPage() {
             onEdit={(lunch) => setForm({ kind: 'edit', lunch })}
             onDelete={handleDelete}
             memberName={memberName}
-            getProfile={getProfile}
+            getProfile={getProfileByEmpNo}
           />
 
           <DoneSection
@@ -150,7 +151,7 @@ export default function LunchPage() {
             onEdit={(lunch) => setForm({ kind: 'edit', lunch })}
             onDelete={handleDelete}
             memberName={memberName}
-            getProfile={getProfile}
+            getProfile={getProfileByEmpNo}
           />
         </div>
       )}
@@ -266,8 +267,9 @@ function WishlistSection({
                   {item.menu ? (
                     <p className="text-sm text-ink-600 mt-0.5">{item.menu}</p>
                   ) : null}
+                  <div className="border-t border-ink-100 my-3" />
                   {item.participants.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {item.participants.map((id) => (
                         <span
                           key={id}
@@ -382,8 +384,9 @@ function DoneSection({
                   {lunch.menu ? (
                     <p className="text-sm text-ink-600 mt-0.5">{lunch.menu}</p>
                   ) : null}
+                  <div className="border-t border-ink-100 my-3" />
                   {lunch.comment ? (
-                    <p className="text-sm text-ink-500 mt-2 whitespace-pre-wrap">
+                    <p className="text-sm text-ink-500 whitespace-pre-wrap">
                       {lunch.comment}
                     </p>
                   ) : null}

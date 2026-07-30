@@ -16,6 +16,7 @@ type Props = {
   initial: Profile | null;
   onClose: () => void;
   onSubmit: (update: {
+    empNo: string;
     iconKey: string;
     colorKey: string;
     photo: string;
@@ -26,6 +27,7 @@ type Props = {
 const STATUS_MAX = 40;
 
 export default function ProfileEditor({ profileId, displayName, initial, onClose, onSubmit }: Props) {
+  const [empNo, setEmpNo] = useState<string>(initial?.empNo ?? '');
   const [iconKey, setIconKey] = useState<string>(initial?.iconKey ?? 'user');
   const [colorKey, setColorKey] = useState<string>(initial?.colorKey ?? 'slate');
   const [photo, setPhoto] = useState<string>(initial?.photo ?? '');
@@ -36,6 +38,8 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
 
   const previewProfile: Profile = {
     id: profileId,
+    empNo,
+    email: initial?.email ?? '',
     iconKey,
     colorKey,
     photo,
@@ -67,6 +71,7 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
     setErr(null);
     try {
       await onSubmit({
+        empNo: empNo.trim(),
         iconKey,
         colorKey,
         photo: photo.trim(),
@@ -109,6 +114,17 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
               </p>
             </div>
           </div>
+
+          <FieldBlock label="본인 사번" hint="캘린더 표시 연동용. 한 번만 설정.">
+            <input
+              type="text"
+              value={empNo}
+              onChange={(e) => setEmpNo(e.target.value.trim())}
+              placeholder="예: 2023124"
+              inputMode="numeric"
+              className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
+            />
+          </FieldBlock>
 
           <FieldBlock label="상태 메시지" hint={`매일 자정 자동 초기화 · ${statusMessage.length}/${STATUS_MAX}`}>
             <input

@@ -12,6 +12,7 @@ type ProfilesValue = {
   loading: boolean;
   error: string | null;
   getProfile: (id: string) => Profile | null;
+  getProfileByEmpNo: (empNo: string) => Profile | null;
   save: (id: string, update: ProfileUpdate) => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -56,9 +57,22 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [profiles],
   );
 
+  const byEmpNo = useMemo(() => {
+    const map: Record<string, Profile> = {};
+    for (const p of Object.values(profiles)) {
+      if (p.empNo) map[p.empNo] = p;
+    }
+    return map;
+  }, [profiles]);
+
+  const getProfileByEmpNo = useCallback(
+    (empNo: string): Profile | null => byEmpNo[empNo] ?? null,
+    [byEmpNo],
+  );
+
   const value = useMemo<ProfilesValue>(
-    () => ({ profiles, loading, error, getProfile, save, refresh }),
-    [profiles, loading, error, getProfile, save, refresh],
+    () => ({ profiles, loading, error, getProfile, getProfileByEmpNo, save, refresh }),
+    [profiles, loading, error, getProfile, getProfileByEmpNo, save, refresh],
   );
 
   return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;

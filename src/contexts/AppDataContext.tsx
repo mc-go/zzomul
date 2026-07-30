@@ -1,42 +1,32 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchTrackedNames } from '../lib/attendance';
-import { extraParticipantName } from '../lib/members';
+import { fetchEmployees, type EmployeeRecord } from '../lib/attendance';
+import { MEMBER_EMPNOS, extraParticipantName } from '../lib/members';
 import { useAuth } from './AuthContext';
 
-const ME_STORAGE_KEY = 'zzomul.me.empNo.v1';
-
 type AppDataValue = {
-  me: string | null;
-  setMe: (empNo: string | null) => void;
   names: Record<string, string>;
   resolveName: (id: string) => string;
   namesLoading: boolean;
+  myEmpNo: string | null;
 };
 
 const AppDataContext = createContext<AppDataValue | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
-  const [me, setMeState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(ME_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [namesLoading, setNamesLoading] = useState(false);
 
   useEffect(() => {
     if (!session?.token) {
-      setNames({});
+      setEmployees([]);
       return;
     }
     let cancelled = false;
     setNamesLoading(true);
-    fetchTrackedNames(session.token)
-      .then((n) => {
-        if (!cancelled) setNames(n);
+    fetchEmployees(session.token)
+      .then((all) => {
+        if (!cancelled) setEmployees(all);
       })
       .catch(() => {})
       .finally(() => {
@@ -47,15 +37,29 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session?.token]);
 
-  const setMe = useCallback((empNo: string | null) => {
-    try {
-      if (empNo) localStorage.setItem(ME_STORAGE_KEY, empNo);
-      else localStorage.removeItem(ME_STORAGE_KEY);
-    } catch {
-      // ignore
+  const names = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const emp of employees) {
+      if ((MEMBER_EMPNOS as readonly string[]).includes(emp.empNo)) {
+        map[emp.empNo] = emp.empNm;
+      }
     }
-    setMeState(empNo);
-  }, []);
+    return map;
+  }, [employees]);
+
+  // 로그인 응답의 userId를 employees[].empId와 대조해서 내 사번 자동 감지.
+  // 매칭 실패 시 null → 사용자가 프로필 편집에서 수동 입력해야 함.
+  const myEmpNo = useMemo(() => {
+    const uid = session?.userId;
+    if (!uid || employees.length === 0) return null;
+    const match = employees.find((e) => String(e.empId) === String(uid));
+    if (match) {
+      console.log('[me detected]', match.empNo, match.empNm);
+      return match.empNo;
+    }
+    console.log('[me detection] userId', uid, 'not found in employees list');
+    return null;
+  }, [session?.userId, employees]);
 
   const resolveName = useCallback(
     (id: string): string => extraParticipantName(id) ?? names[id] ?? id,
@@ -63,8 +67,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo<AppDataValue>(
-    () => ({ me, setMe, names, resolveName, namesLoading }),
-    [me, setMe, names, resolveName, namesLoading],
+    () => ({ names, resolveName, namesLoading, myEmpNo }),
+    [names, resolveName, namesLoading, myEmpNo],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

@@ -6,6 +6,23 @@ export function isTrackedMember(empNo: string | null | undefined): empNo is Memb
   return !!empNo && (MEMBER_EMPNOS as readonly string[]).includes(empNo);
 }
 
+// 듀얼아이 로그인은 이메일 기반, 근태 API는 사번 기반. 사이를 이어줄 매핑.
+// 새 멤버 추가 시 여기에 한 줄 추가.
+const EMAIL_TO_EMPNO_RAW: Record<string, MemberEmpNo> = {
+  'mc.go14@konai.com': '2023124',
+  // '동료1@konai.com': '2023020',
+  // '동료2@konai.com': '2024019',
+};
+
+const EMAIL_TO_EMPNO: Record<string, MemberEmpNo> = Object.fromEntries(
+  Object.entries(EMAIL_TO_EMPNO_RAW).map(([k, v]) => [k.toLowerCase(), v]),
+);
+
+export function empNoForLogin(username: string | null | undefined): MemberEmpNo | null {
+  if (!username) return null;
+  return EMAIL_TO_EMPNO[username.toLowerCase()] ?? null;
+}
+
 // 캘린더에는 안 나오지만 먹기록의 참여자 리스트엔 들어가는 사람들 (예: 퇴사자).
 export const EXTRA_PARTICIPANTS = [{ id: 'ex_sohyun', name: '박소현' }] as const;
 

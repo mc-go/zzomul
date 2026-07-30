@@ -6,6 +6,8 @@ export type Session = {
   username: string;
   empNo?: string;
   empNm?: string;
+  userId?: string | number;
+  accountId?: string | number;
   savedAt: number;
 };
 
@@ -41,22 +43,25 @@ export async function login(username: string, password: string): Promise<Session
     throw new Error(text || `로그인 실패 (${res.status})`);
   }
 
-  const data = (await res.json()) as {
-    authToken?: string;
-    username?: string;
-    empNo?: string;
-    empNm?: string;
-  };
+  const data = (await res.json()) as Record<string, unknown>;
 
-  if (!data.authToken) {
+  // 진단용 로그: 로그인 응답에 어떤 필드가 오는지 콘솔에서 확인 가능
+  console.log('[login response keys]', Object.keys(data));
+
+  const token = typeof data.authToken === 'string' ? data.authToken : null;
+  if (!token) {
     throw new Error('응답에 authToken이 없어요.');
   }
 
+  const asString = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : undefined);
+
   const session: Session = {
-    token: data.authToken,
-    username: data.username ?? username,
-    empNo: data.empNo,
-    empNm: data.empNm,
+    token,
+    username: asString(data.username) ?? username,
+    empNo: asString(data.empNo),
+    empNm: asString(data.empNm),
+    userId: (asString(data.userId) as string | undefined) as string | number | undefined,
+    accountId: (asString(data.accountId) as string | undefined) as string | number | undefined,
     savedAt: Date.now(),
   };
   writeSession(session);
