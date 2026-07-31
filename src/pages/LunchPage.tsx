@@ -10,6 +10,7 @@ import {
   LuExternalLink,
   LuChevronDown,
   LuChevronRight,
+  LuStar,
 } from 'react-icons/lu';
 import StarRating from '../components/StarRating';
 import {
@@ -24,8 +25,17 @@ import {
   type MealType,
 } from '../lib/lunches';
 import {
+  averageRating,
+  deleteReview,
+  ensureReviewsSchema,
+  listAllReviews,
+  upsertReview,
+  type LunchReview,
+} from '../lib/reviews';
+import {
   ALL_PARTICIPANT_IDS,
   MEMBER_EMPNOS,
+  isValidParticipantId,
   type ParticipantId,
 } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,21 +55,27 @@ type FormRequest = AddFormRequest | EditFormRequest | PromoteFormRequest | null;
 
 export default function LunchPage() {
   const { session } = useAuth();
-  const { getProfileByEmpNo } = useProfiles();
-  const { resolveName } = useAppData();
+  const { getProfileByEmpNo, getProfile } = useProfiles();
+  const { resolveName, myEmpNo } = useAppData();
   const me = session?.userId ? String(session.userId) : '';
+  // 내 참여자 ID(사번): 프로필에 저장된 값 우선, 없으면 자동 감지값
+  const myPid = (me ? getProfile(me)?.empNo : '') || myEmpNo || '';
   const [lunches, setLunches] = useState<Lunch[]>([]);
+  const [reviews, setReviews] = useState<Record<number, LunchReview[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<FormRequest>(null);
+  const [reviewTarget, setReviewTarget] = useState<Lunch | null>(null);
 
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
       await ensureSchema();
-      const rows = await listLunches();
+      await ensureReviewsSchema();
+      const [rows, revs] = await Promise.all([listLunches(), listAllReviews()]);
       setLunches(rows);
+      setReviews(revs);
     } catch (e) {
       setError(e instanceof Error ? e.message : '불러오기 실패');
     } finally {
@@ -114,6 +130,22 @@ export default function LunchPage() {
     }
   }
 
+  // 내 평 저장 (있으면 덮어씀)
+  async function handleReviewSave(input: { lunchId: number; rating: number; comment: string }) {
+    if (!isValidParticipantId(myPid)) return;
+    await upsertReview({ ...input, reviewerId: myPid });
+    setReviewTarget(null);
+    await refresh();
+  }
+
+  // 내 평 삭제
+  async function handleReviewDelete(lunchId: number) {
+    if (!myPid) return;
+    await deleteReview(lunchId, myPid);
+    setReviewTarget(null);
+    await refresh();
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -144,21 +176,29 @@ export default function LunchPage() {
           />
 
           <DoneSection
-            title={MEAL_LABEL.lunch}
+            title={`🍜 ${MEAL_LABEL.lunch}`}
+            collapseKey="zzomul.done.lunch.collapsed.v1"
             records={lunchDone}
+            reviews={reviews}
+            myPid={myPid}
             onAdd={() => setForm({ kind: 'add', status: 'done', meal: 'lunch' })}
             onEdit={(lunch) => setForm({ kind: 'edit', lunch })}
             onDelete={handleDelete}
+            onReview={(lunch) => setReviewTarget(lunch)}
             memberName={memberName}
             getProfile={getProfileByEmpNo}
           />
 
           <DoneSection
-            title={MEAL_LABEL.dinner}
+            title={`🌙 ${MEAL_LABEL.dinner}`}
+            collapseKey="zzomul.done.dinner.collapsed.v1"
             records={dinnerDone}
+            reviews={reviews}
+            myPid={myPid}
             onAdd={() => setForm({ kind: 'add', status: 'done', meal: 'dinner' })}
             onEdit={(lunch) => setForm({ kind: 'edit', lunch })}
             onDelete={handleDelete}
+            onReview={(lunch) => setReviewTarget(lunch)}
             memberName={memberName}
             getProfile={getProfileByEmpNo}
           />
@@ -193,6 +233,16 @@ export default function LunchPage() {
           memberName={memberName}
           onClose={() => setForm(null)}
           onSubmit={handlePromote}
+        />
+      ) : null}
+
+      {reviewTarget ? (
+        <ReviewFormDialog
+          lunch={reviewTarget}
+          existing={(reviews[reviewTarget.id] ?? []).find((r) => r.reviewerId === myPid) ?? null}
+          onClose={() => setReviewTarget(null)}
+          onSubmit={handleReviewSave}
+          onDelete={handleReviewDelete}
         />
       ) : null}
     </div>
@@ -250,14 +300,14 @@ function WishlistSection({
           ) : (
             <LuChevronDown className="text-ink-400 self-center" />
           )}
-          <h2 className="text-base font-semibold tracking-tight">가고싶은</h2>
+          <h2 className="text-base font-semibold tracking-tight">🌟 가고싶은</h2>
           <span className="text-xs text-ink-400">{records.length}건</span>
         </button>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => onAdd('lunch')}
-            className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-ink-200 text-ink-700 text-[11px] font-medium hover:bg-ink-50"
+            className="inline-flex items-center gap-1 h-8 px-3 rounded-full border border-ink-200 bg-white text-ink-700 text-[11px] font-medium hover:border-pretzel/40 hover:text-pretzel"
           >
             <LuPlus className="text-xs" />
             런치
@@ -265,7 +315,7 @@ function WishlistSection({
           <button
             type="button"
             onClick={() => onAdd('dinner')}
-            className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-ink-200 text-ink-700 text-[11px] font-medium hover:bg-ink-50"
+            className="inline-flex items-center gap-1 h-8 px-3 rounded-full border border-ink-200 bg-white text-ink-700 text-[11px] font-medium hover:border-pretzel/40 hover:text-pretzel"
           >
             <LuPlus className="text-xs" />
             디너
@@ -274,15 +324,15 @@ function WishlistSection({
       </header>
 
       {collapsed ? null : records.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-ink-200 py-8 px-6 text-center">
-          <p className="text-xs text-ink-400">아직 없어요. 가보고 싶은 곳을 추가해 보세요.</p>
+        <div className="rounded-2xl border border-dashed border-pretzel/30 bg-white/50 py-8 px-6 text-center">
+          <p className="text-xs text-ink-400">아직 없어요. 가보고 싶은 곳을 추가해 보세요 🍽️</p>
         </div>
       ) : (
         <ul className="space-y-3">
           {records.map((item) => (
             <li
               key={item.id}
-              className="rounded-lg border border-ink-100 bg-white p-4 hover:border-ink-200 transition-colors"
+              className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -330,7 +380,7 @@ function WishlistSection({
                   <button
                     type="button"
                     onClick={() => onPromote(item)}
-                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md bg-ink-900 text-white text-[11px] font-medium hover:bg-ink-700"
+                    className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-ink-900 text-white text-[11px] font-medium hover:bg-pretzel"
                     title="다녀왔어요"
                   >
                     <LuCheck className="text-xs" />
@@ -368,112 +418,292 @@ function WishlistSection({
 
 function DoneSection({
   title,
+  collapseKey,
   records,
+  reviews,
+  myPid,
   onAdd,
   onEdit,
   onDelete,
+  onReview,
   memberName,
   getProfile,
 }: {
   title: string;
+  collapseKey: string;
   records: Lunch[];
+  reviews: Record<number, LunchReview[]>;
+  myPid: string;
   onAdd: () => void;
   onEdit: (lunch: Lunch) => void;
   onDelete: (id: number) => void;
+  onReview: (lunch: Lunch) => void;
   memberName: (empNo: string) => string;
   getProfile: (id: string) => import('../lib/profiles').Profile | null;
 }) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(collapseKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(collapseKey, next ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <section>
       <header className="flex items-center justify-between mb-3">
-        <div className="flex items-baseline gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-baseline gap-2 hover:opacity-70 transition-opacity"
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? (
+            <LuChevronRight className="text-ink-400 self-center" />
+          ) : (
+            <LuChevronDown className="text-ink-400 self-center" />
+          )}
           <h2 className="text-base font-semibold tracking-tight">{title}</h2>
           <span className="text-xs text-ink-400">{records.length}건</span>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onAdd}
-          className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md bg-ink-900 text-white text-[11px] font-medium hover:bg-ink-700"
+          className="inline-flex items-center gap-1 h-8 px-3 rounded-full bg-ink-900 text-white text-[11px] font-medium hover:bg-pretzel"
         >
           <LuPlus className="text-xs" />
           추가
         </button>
       </header>
 
-      {records.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-ink-200 py-8 px-6 text-center">
-          <p className="text-xs text-ink-400">기록 없음</p>
+      {collapsed ? null : records.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-pretzel/30 bg-white/50 py-8 px-6 text-center">
+          <p className="text-xs text-ink-400">아직 기록이 없어요 🥄</p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {records.map((lunch) => (
-            <li
-              key={lunch.id}
-              className="rounded-lg border border-ink-100 bg-white p-4 hover:border-ink-200 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[11px] text-ink-400 font-medium">
-                      {format(new Date(lunch.date), 'M월 d일 (EEE)', { locale: ko })}
-                    </span>
-                    <StarRating value={lunch.rating} size="sm" readOnly />
-                  </div>
-                  <RestaurantTitle name={lunch.restaurant} link={lunch.link} />
-                  {lunch.menu ? (
-                    <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{lunch.menu}</p>
-                  ) : null}
-                  <div className="border-t border-ink-100 my-3" />
-                  {lunch.comment ? (
-                    <p className="text-sm text-ink-500 whitespace-pre-wrap">
-                      {lunch.comment}
-                    </p>
-                  ) : null}
-                  {lunch.participants.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {lunch.participants.map((id) => (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
-                        >
-                          <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
-                          {memberName(id)}
+          {records.map((lunch) => {
+            const revs = reviews[lunch.id] ?? [];
+            const avg = averageRating(revs);
+            const myReview = myPid ? revs.find((r) => r.reviewerId === myPid) ?? null : null;
+            // 참여자만 평을 남길 수 있음 (참여자 목록이 비어 있으면 누구나 가능)
+            const canReview =
+              !!myPid && (lunch.participants.length === 0 || lunch.participants.includes(myPid as ParticipantId));
+            return (
+              <li
+                key={lunch.id}
+                className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[11px] text-ink-400 font-medium">
+                        {format(new Date(lunch.date), 'M월 d일 (EEE)', { locale: ko })}
+                      </span>
+                      {/* 리뷰가 있으면 평균, 없으면 기존 단일 별점 */}
+                      <StarRating value={avg ?? lunch.rating} size="sm" readOnly />
+                      {avg != null ? (
+                        <span className="text-[11px] text-ink-500 font-medium">
+                          평균 {avg.toFixed(1)} · 평 {revs.length}개
                         </span>
-                      ))}
+                      ) : null}
                     </div>
-                  ) : null}
-                  <CreatorLine
-                    createdBy={lunch.createdBy}
-                    memberName={memberName}
-                    getProfile={getProfile}
-                  />
+                    <RestaurantTitle name={lunch.restaurant} link={lunch.link} />
+                    {lunch.menu ? (
+                      <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{lunch.menu}</p>
+                    ) : null}
+                    <div className="border-t border-ink-100 my-3" />
+                    {revs.length > 0 ? (
+                      <ul className="mt-3 space-y-1.5">
+                        {revs.map((r) => (
+                          <li
+                            key={r.reviewerId}
+                            className="flex items-start gap-2 rounded-md bg-ink-50/60 border border-ink-100 px-2.5 py-2"
+                          >
+                            <Avatar
+                              profile={getProfile(r.reviewerId)}
+                              size="xs"
+                              fallbackText={memberName(r.reviewerId)}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-medium text-ink-700">
+                                  {memberName(r.reviewerId)}
+                                </span>
+                                <StarRating value={r.rating} size="sm" readOnly />
+                              </div>
+                              {r.comment ? (
+                                <p className="text-xs text-ink-600 mt-0.5 whitespace-pre-wrap">
+                                  {r.comment}
+                                </p>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {canReview ? (
+                      <button
+                        type="button"
+                        onClick={() => onReview(lunch)}
+                        className="mt-3 inline-flex items-center gap-1 h-7 px-3 rounded-full border border-amber-200 bg-amber-50/60 text-amber-700 text-[11px] font-medium hover:bg-amber-100"
+                      >
+                        <LuStar className="text-xs" />
+                        {myReview ? '내 평 수정' : '평 남기기'}
+                      </button>
+                    ) : null}
+                    {lunch.participants.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {lunch.participants.map((id) => (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
+                          >
+                            <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
+                            {memberName(id)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <CreatorLine
+                      createdBy={lunch.createdBy}
+                      memberName={memberName}
+                      getProfile={getProfile}
+                    />
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(lunch)}
+                      className="text-ink-300 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50"
+                      aria-label="수정"
+                      title="수정"
+                    >
+                      <LuPencil className="text-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(lunch.id)}
+                      className="text-ink-300 hover:text-red-600 p-1.5 rounded hover:bg-red-50"
+                      aria-label="삭제"
+                      title="삭제"
+                    >
+                      <LuTrash2 className="text-sm" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(lunch)}
-                    className="text-ink-300 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50"
-                    aria-label="수정"
-                    title="수정"
-                  >
-                    <LuPencil className="text-sm" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(lunch.id)}
-                    className="text-ink-300 hover:text-red-600 p-1.5 rounded hover:bg-red-50"
-                    aria-label="삭제"
-                    title="삭제"
-                  >
-                    <LuTrash2 className="text-sm" />
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
+  );
+}
+
+// -----------------
+// Review form (participant rating + comment)
+// -----------------
+
+function ReviewFormDialog({
+  lunch,
+  existing,
+  onClose,
+  onSubmit,
+  onDelete,
+}: {
+  lunch: Lunch;
+  existing: LunchReview | null;
+  onClose: () => void;
+  onSubmit: (data: { lunchId: number; rating: number; comment: string }) => Promise<void>;
+  onDelete: (lunchId: number) => Promise<void>;
+}) {
+  const [rating, setRating] = useState(existing ? existing.rating : 4);
+  const [comment, setComment] = useState(existing ? existing.comment : '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onSubmit({ lunchId: lunch.id, rating, comment: comment.trim() });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '저장 실패');
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (busy) return;
+    if (!confirm('내 평을 삭제할까요?')) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onDelete(lunch.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '삭제 실패');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title={existing ? '내 평 수정' : '평 남기기'} onClose={onClose}>
+      <div className="px-5 py-3 border-b border-ink-100 bg-ink-50/40">
+        <p className="text-[11px] text-ink-500">
+          {MEAL_LABEL[lunch.meal]} ·{' '}
+          <span className="font-medium text-ink-700">{lunch.restaurant}</span>
+        </p>
+        {lunch.menu ? <p className="text-[11px] text-ink-400 mt-0.5">{lunch.menu}</p> : null}
+      </div>
+
+      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto">
+        <Field label="내 별점">
+          <StarRating value={rating} onChange={setRating} size="lg" />
+        </Field>
+
+        <Field label="소감">
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+            placeholder="어땠는지 솔직하게 남겨주세요."
+            className="w-full px-3 py-2 rounded-md border border-ink-200 text-sm placeholder-ink-300 resize-none"
+          />
+        </Field>
+
+        {existing ? (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={busy}
+            className="text-[11px] text-red-500 hover:text-red-700 hover:underline underline-offset-2 disabled:opacity-60"
+          >
+            내 평 삭제
+          </button>
+        ) : null}
+
+        {err ? (
+          <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+            {err}
+          </div>
+        ) : null}
+      </form>
+
+      <ModalFooter busy={busy} onClose={onClose} onSubmit={submit} />
+    </ModalShell>
   );
 }
 
@@ -578,7 +808,6 @@ function RecordForm({
   const [restaurant, setRestaurant] = useState(isEdit ? mode.lunch.restaurant : '');
   const [menu, setMenu] = useState(isEdit ? mode.lunch.menu : '');
   const [rating, setRating] = useState(isEdit ? mode.lunch.rating || 4 : 4);
-  const [comment, setComment] = useState(isEdit ? mode.lunch.comment : '');
   const [link, setLink] = useState(isEdit ? mode.lunch.link : '');
   const [participants, setParticipants] = useState<ParticipantId[]>(
     isEdit && mode.lunch.participants.length > 0
@@ -613,7 +842,8 @@ function RecordForm({
         restaurant: restaurant.trim(),
         menu: menu.trim(),
         rating: isWishlist ? 0 : rating,
-        comment: isWishlist ? '' : comment.trim(),
+        // 한줄평은 참여자별 평(lunch_reviews)으로 대체됨 — 기존 값만 보존
+        comment: isEdit ? mode.lunch.comment : '',
         link: link.trim(),
         plannedDate: isWishlist ? plannedDate || null : null,
         participants,
@@ -715,21 +945,9 @@ function RecordForm({
         </Field>
 
         {!isWishlist ? (
-          <>
-            <Field label="별점">
-              <StarRating value={rating} onChange={setRating} size="lg" />
-            </Field>
-
-            <Field label="한줄평">
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={3}
-                placeholder="어땠는지 짧게 남겨주세요."
-                className="w-full px-3 py-2 rounded-md border border-ink-200 text-sm placeholder-ink-300 resize-none"
-              />
-            </Field>
-          </>
+          <Field label="별점">
+            <StarRating value={rating} onChange={setRating} size="lg" />
+          </Field>
         ) : null}
 
         <Field label={isWishlist ? '함께 갈 사람' : '함께한 사람'}>
@@ -948,7 +1166,7 @@ function ModalFooter({
         type="submit"
         onClick={onSubmit}
         disabled={busy}
-        className="h-10 px-4 text-sm rounded-md bg-ink-900 text-white hover:bg-ink-700 disabled:opacity-60 disabled:cursor-not-allowed"
+        className="h-10 px-5 text-sm rounded-full bg-ink-900 text-white hover:bg-pretzel disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {busy ? '저장 중...' : submitLabel}
       </button>

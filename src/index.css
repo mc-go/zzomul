@@ -18,7 +18,8 @@ body,
 }
 
 body {
-  @apply bg-white text-ink-900 font-sans antialiased;
+  /* 따뜻한 크림톤 배경 — 카드가 도드라져 보이게 */
+  @apply bg-[#fdfaf3] text-ink-900 font-sans antialiased;
   font-feature-settings: 'ss03', 'cv11';
 }
 

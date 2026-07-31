@@ -19,6 +19,12 @@ import {
   type AttendanceRecord,
 } from '../lib/attendance';
 import {
+  occurrencesOnDate,
+  type AnniversaryKind,
+  type AnniversaryOccurrence,
+} from '../lib/anniversaries';
+import { useAnniversaries } from '../contexts/AnniversariesContext';
+import {
   DOT_STYLES,
   KIND_STYLES,
   LEGEND_ITEMS,
@@ -34,10 +40,19 @@ import MemberProfileModal from '../components/MemberProfileModal';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
+// 기념일 종류별 배지 색
+const ANNIV_STYLES: Record<AnniversaryKind, string> = {
+  birthday: 'bg-pink-50 text-pink-600 border-pink-100',
+  hire: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  wedding: 'bg-rose-50 text-rose-600 border-rose-100',
+  custom: 'bg-violet-50 text-violet-600 border-violet-100',
+};
+
 export default function CalendarPage() {
   const { session, logout } = useAuth();
   const { getProfileByEmpNo } = useProfiles();
   const { resolveName } = useAppData();
+  const { items: anniversaries } = useAnniversaries();
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +107,17 @@ export default function CalendarPage() {
     [monthStart, monthEnd],
   );
 
+  // 날짜별 기념일 배지 (그리드 범위 전체 계산)
+  const annivByDate = useMemo(() => {
+    const map: Record<string, AnniversaryOccurrence[]> = {};
+    if (anniversaries.length === 0) return map;
+    for (const day of gridDays) {
+      const occ = occurrencesOnDate(anniversaries, day, resolveName);
+      if (occ.length > 0) map[format(day, 'yyyy-MM-dd')] = occ;
+    }
+    return map;
+  }, [anniversaries, gridDays, resolveName]);
+
   return (
     <div>
       <div className="mb-5">
@@ -134,7 +160,7 @@ export default function CalendarPage() {
             loading ? 'opacity-40 pointer-events-none' : 'opacity-100'
           }`}
         >
-          <section className="hidden md:block rounded-lg border border-ink-100 overflow-hidden">
+          <section className="hidden md:block rounded-2xl border border-ink-100 bg-white shadow-card overflow-hidden">
             <div className="grid grid-cols-7 border-b border-ink-100 bg-ink-50/60">
               {WEEKDAYS.map((day, i) => (
                 <div
@@ -158,7 +184,7 @@ export default function CalendarPage() {
                     key={dateKey}
                     className={`relative min-h-[110px] border-t border-l border-ink-100 first:border-l-0 p-2 flex flex-col gap-1.5 ${
                       inMonth ? 'bg-white' : 'bg-ink-50/40'
-                    } ${isToday ? 'ring-2 ring-inset ring-ink-900' : ''}`}
+                    } ${isToday ? 'ring-2 ring-inset ring-pretzel' : ''}`}
                   >
                     <div className="flex items-center justify-between">
                       <span
@@ -175,11 +201,22 @@ export default function CalendarPage() {
                         {format(day, 'd')}
                       </span>
                       {isToday ? (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-ink-900 text-white">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-pretzel text-white">
                           오늘
                         </span>
                       ) : null}
                     </div>
+                    {annivByDate[dateKey]?.map((a) => (
+                      <div
+                        key={a.key}
+                        className={`text-[10px] leading-tight px-1.5 py-0.5 rounded-full border truncate ${ANNIV_STYLES[a.kind]} ${
+                          inMonth ? '' : 'opacity-50'
+                        }`}
+                        title={a.text}
+                      >
+                        {a.emoji} {a.text}
+                      </div>
+                    ))}
                     {inMonth ? (
                       <ul className="space-y-1">
                         {MEMBER_EMPNOS.map((empNo) => {
@@ -219,8 +256,8 @@ export default function CalendarPage() {
               return (
                 <article
                   key={dateKey}
-                  className={`rounded-lg border bg-white p-3 ${
-                    isToday ? 'border-ink-900 border-2' : 'border-ink-100'
+                  className={`rounded-2xl border bg-white p-3 shadow-card ${
+                    isToday ? 'border-pretzel border-2' : 'border-ink-100'
                   }`}
                 >
                   <header className="flex items-center gap-2 mb-2">
@@ -232,10 +269,18 @@ export default function CalendarPage() {
                       {format(day, 'd일 (EEE)', { locale: ko })}
                     </span>
                     {isToday ? (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-ink-900 text-white">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-pretzel text-white">
                         오늘
                       </span>
                     ) : null}
+                    {annivByDate[dateKey]?.map((a) => (
+                      <span
+                        key={a.key}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ANNIV_STYLES[a.kind]}`}
+                      >
+                        {a.emoji} {a.text}
+                      </span>
+                    ))}
                   </header>
                   <ul className="grid grid-cols-1 gap-1.5">
                     {MEMBER_EMPNOS.map((empNo) => {

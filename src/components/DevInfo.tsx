@@ -1,8 +1,49 @@
 import { useEffect, useState } from 'react';
-import { LuCode, LuX, LuExternalLink } from 'react-icons/lu';
+import { format } from 'date-fns';
+import { LuCode, LuX, LuExternalLink, LuEye } from 'react-icons/lu';
+import { DailyPopupView } from './DailyPopup';
+import { MEMBER_EMPNOS } from '../lib/members';
+
+// 팝업 미리보기용 샘플 데이터 (실제 저장 안 됨)
+function sampleReports() {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  return [
+    {
+      id: -1,
+      date: today,
+      authorId: MEMBER_EMPNOS[1],
+      content: '오늘 오후 반차예요~ 병원 다녀올게요 🏃',
+      createdAt: '',
+      updatedAt: '',
+    },
+  ];
+}
+
+function sampleNotices() {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  return [
+    {
+      key: 'preview-birthday',
+      kind: 'birthday' as const,
+      emoji: '🎂',
+      text: '박소현 생일',
+      daysUntil: 0,
+      date: today,
+    },
+    {
+      key: 'preview-zzomul',
+      kind: 'custom' as const,
+      emoji: '🥨',
+      text: '쪼물랭 2주년',
+      daysUntil: 7,
+      date: today,
+    },
+  ];
+}
 
 export default function DevInfo() {
   const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -52,6 +93,23 @@ export default function DevInfo() {
             </header>
 
             <div className="p-4 overflow-y-auto space-y-5 text-xs">
+              <Section title="미리보기">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setPreview(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-ink-200 text-ink-600 text-[11px] font-medium hover:bg-ink-50 hover:text-ink-900"
+                >
+                  <LuEye className="text-sm" />
+                  오늘의 소식 팝업 미리보기
+                </button>
+                <p className="mt-1 text-ink-400">
+                  다른 사람 화면에 뜨는 팝업을 샘플 데이터로 확인해요.
+                </p>
+              </Section>
+
               <Section title="저장소">
                 <ExternalLink href="https://github.com/mc-go/zzomul">mc-go/zzomul</ExternalLink>
                 <p className="mt-1 text-ink-400">Public repo — 소스 공개됨</p>
@@ -134,6 +192,17 @@ export default function DevInfo() {
                     <Code>lunches</Code>: date · meal(lunch/dinner) · status(wishlist/done) ·
                     restaurant · rating · link · participants(JSON)
                   </li>
+                  <li>
+                    <Code>lunch_reviews</Code>: lunch_id + reviewer_id(PK) · rating(0.5 단위) ·
+                    comment
+                  </li>
+                  <li>
+                    <Code>reports</Code>: date + author_id(UNIQUE) · content — 오늘의 보고
+                  </li>
+                  <li>
+                    <Code>anniversaries</Code>: owner_id · kind(birthday/hire/wedding/custom) ·
+                    date · repeat(매년/100일/일회성) · remind_days(JSON)
+                  </li>
                 </ul>
                 <p className="mt-1 text-[11px] text-ink-400">
                   스키마 변경은 <Code>ensureSchema</Code>에서 ALTER TABLE 자동 처리
@@ -164,6 +233,14 @@ export default function DevInfo() {
             </footer>
           </div>
         </div>
+      ) : null}
+
+      {preview ? (
+        <DailyPopupView
+          reports={sampleReports()}
+          notices={sampleNotices()}
+          onClose={() => setPreview(false)}
+        />
       ) : null}
     </>
   );
