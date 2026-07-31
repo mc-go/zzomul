@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuMegaphone, LuTrash2, LuPencil } from 'react-icons/lu';
+import { LuMegaphone, LuTrash2, LuPencil, LuX } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import {
   deleteReport,
+  deleteReportComment,
   ensureReportsSchema,
+  listCommentsForReports,
   listRecentReports,
   upsertReport,
+  upsertReportComment,
   type Report,
+  type ReportComment,
 } from '../lib/reports';
+import { CommentInput } from '../components/DailyPopup';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
@@ -25,11 +30,13 @@ export default function ReportPage() {
 
   const today = format(new Date(), 'yyyy-MM-dd');
   const [reports, setReports] = useState<Report[]>([]);
+  const [comments, setComments] = useState<Record<number, ReportComment[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
 
   const myToday = useMemo(
     () => reports.find((r) => r.date === today && r.authorId === myPid) ?? null,
@@ -43,6 +50,7 @@ export default function ReportPage() {
       await ensureReportsSchema();
       const rows = await listRecentReports();
       setReports(rows);
+      setComments(await listCommentsForReports(rows.map((r) => r.id)));
     } catch (e) {
       setError(e instanceof Error ? e.message : '불러오기 실패');
     } finally {
@@ -92,6 +100,30 @@ export default function ReportPage() {
     }
   }
 
+  // 댓글 작성/수정 (사람당 1개 — 다시 보내면 덮어씀)
+  async function handleAddComment(reportId: number, content: string) {
+    if (!myPid) return;
+    await upsertReportComment(reportId, myPid, content);
+    setComments(await listCommentsForReports(reports.map((r) => r.id)));
+  }
+
+  // 내 오늘의 보고를 위 작성칸으로 불러와 수정
+  function startEdit(report: Report) {
+    setDraft(report.content);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    draftRef.current?.focus();
+  }
+
+  async function handleDeleteComment(comment: ReportComment) {
+    if (!confirm('이 댓글을 삭제할까요?')) return;
+    try {
+      await deleteReportComment(comment.id);
+      setComments(await listCommentsForReports(reports.map((r) => r.id)));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '삭제 실패');
+    }
+  }
+
   // 날짜별 그룹 (최근 날짜부터)
   const grouped = useMemo(() => {
     const map = new Map<string, Report[]>();
@@ -134,6 +166,7 @@ export default function ReportPage() {
         {myPid ? (
           <form onSubmit={submit} className="space-y-3">
             <textarea
+              ref={draftRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={3}
@@ -178,26 +211,74 @@ export default function ReportPage() {
               <ul className="space-y-2">
                 {rows.map((r) => {
                   const name = resolveName(r.authorId);
+                  const cmts = comments[r.id] ?? [];
                   return (
                     <li
                       key={r.id}
-                      className="flex items-start gap-2.5 rounded-2xl border border-ink-100 bg-white px-3.5 py-3 shadow-card"
+                      className="rounded-2xl border border-ink-100 bg-white px-3.5 py-3 shadow-card hover:border-pretzel/40 hover:-translate-y-0.5 transition-all"
                     >
-                      <Avatar profile={getProfileByEmpNo(r.authorId)} size="sm" fallbackText={name} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-medium text-ink-700">{name}</p>
-                        <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{r.content}</p>
+                      <div className="flex items-start gap-2.5">
+                        <Avatar profile={getProfileByEmpNo(r.authorId)} size="sm" fallbackText={name} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-medium text-ink-700">{name}</p>
+                          <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{r.content}</p>
+                        </div>
+                        {r.authorId === myPid && r.date === today ? (
+                          <button
+                            type="button"
+                            onClick={() => startEdit(r)}
+                            className="text-ink-300 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50 shrink-0"
+                            aria-label="수정"
+                            title="수정"
+                          >
+                            <LuPencil className="text-sm" />
+                          </button>
+                        ) : null}
+                        {r.authorId === myPid ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r)}
+                            className="text-ink-300 hover:text-red-600 p-1.5 rounded hover:bg-red-50 shrink-0"
+                            aria-label="삭제"
+                            title="삭제"
+                          >
+                            <LuTrash2 className="text-sm" />
+                          </button>
+                        ) : null}
                       </div>
-                      {r.authorId === myPid ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(r)}
-                          className="text-ink-300 hover:text-red-600 p-1.5 rounded hover:bg-red-50 shrink-0"
-                          aria-label="삭제"
-                          title="삭제"
-                        >
-                          <LuTrash2 className="text-sm" />
-                        </button>
+                      {cmts.length > 0 ? (
+                        <ul className="mt-2 space-y-1 pl-9">
+                          {cmts.map((c) => (
+                            <li key={c.id} className="group flex items-start gap-1.5 text-xs">
+                              <span className="font-semibold text-ink-600 shrink-0">
+                                {resolveName(c.authorId)}
+                              </span>
+                              <span className="text-ink-500 whitespace-pre-wrap min-w-0">
+                                {c.content}
+                              </span>
+                              {c.authorId === myPid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(c)}
+                                  className="text-ink-200 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  aria-label="댓글 삭제"
+                                  title="댓글 삭제"
+                                >
+                                  <LuX className="text-xs" />
+                                </button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {/* 본인 보고에는 댓글을 달 수 없음 */}
+                      {myPid && r.authorId !== myPid ? (
+                        <div className="pl-2">
+                          <CommentInput
+                            initial={cmts.find((c) => c.authorId === myPid)?.content ?? ''}
+                            onSubmit={(text) => handleAddComment(r.id, text)}
+                          />
+                        </div>
                       ) : null}
                     </li>
                   );

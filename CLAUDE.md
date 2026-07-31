@@ -37,6 +37,7 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
   - `lunches` — 먹기록 (status: wishlist/done, meal: lunch/dinner, participants JSON)
   - `lunch_reviews` — 참여자별 평 (lunch_id + reviewer_id PK, 별점 0.5 단위)
   - `reports` — 오늘의 보고 (date + author_id UNIQUE, 하루 1건 upsert)
+  - `report_comments` — 보고 댓글 (report_id + author_id UNIQUE, 1인 1댓글 upsert, 본인 보고엔 불가)
   - `anniversaries` — 기념일 (kind: birthday/hire/wedding/custom, repeat: yearly/every100days/once, remind_days JSON)
 
 ## 도메인 메모
@@ -46,11 +47,15 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
 - 기념일 반복: 입사(hire)는 100일 단위, 생일/결혼은 매년 고정. 기타(custom)만 매년/100일 단위/일회성 선택 가능. **당일 알림은 무조건 팝업**, 그 외는 remind_days 설정을 따름.
 - 첫 접속 팝업(`DailyPopup`): 오늘의 보고(남이 쓴 것) + 기념일 알림. 본 항목은 localStorage `zzomul.daily.seen.v1`에 기록.
 - 근태 상태 코드: `1` 정상근무 · `70005` 오후반차 · `70006` 휴가 · 그 외 "기타"
+- **공휴일**: `src/lib/holidays.ts`에 수동 관리 (대체공휴일 포함). ⚠ 연말마다 다음 해 날짜 추가 필요. 캘린더에 빨간 날짜+이름으로 표시.
 
 ## UI 컨벤션
 
-- 색상 팔레트: `ink`(회색조) · `accent`(파랑) · `pretzel`(갈색) — tailwind.config.js 참고
-- 모달은 LunchPage의 `ModalShell` 패턴(하단 시트 → sm 이상 중앙) 따르기
-- 커스텀 애니메이션: `animate-wiggle`, `animate-float`, `animate-bake`
+- 색상 팔레트: `ink`(회색조) · `accent`(파랑) · `pretzel`(갈색), 배경은 크림톤(`#fdfaf3`) — tailwind.config.js 참고
+- 모달은 LunchPage의 `ModalShell` 패턴(하단 시트 → sm 이상 중앙, `overflow-hidden` 필수) 따르기
+- 커스텀 애니메이션: wiggle/float/bake + pop·burst(팝업 팡), rise(탭 전환), starpop(별점), spinonce(로고), cloud·bob(배경 음식)
+  - ⚠ 콘텐츠 래퍼에 transform이 남는 애니메이션(fill 모드) 금지 — fixed 모달의 기준점이 어긋남 (rise가 fill 없는 이유)
+  - ⚠ tailwind.config.js 수정은 dev 서버 재시작 필요 (핫리로드 안 됨)
+- 배경 음식(`FloatingBreads`): 전 아이콘 이동 속도 150s 동일 유지 — 속도가 다르면 시간이 지나며 겹침. 추가 시 top 순서 기준 황금비 delay 규칙 따르기.
 - 앱 내 텍스트는 전부 한국어, 말투는 "~해요"체
 - 우측 하단 "개발 정보" 버튼(`src/components/DevInfo.tsx`)에 배포/스키마/주의사항 요약이 있음 — 구조가 바뀌면 이 패널도 함께 갱신할 것

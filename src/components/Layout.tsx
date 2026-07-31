@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ import ProfileEditor from './ProfileEditor';
 import DevInfo from './DevInfo';
 import DailyPopup from './DailyPopup';
 import AnniversaryManager from './AnniversaryManager';
+import FloatingBreads from './FloatingBreads';
 
 const linkBase =
   'flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-medium transition-colors';
@@ -19,6 +20,8 @@ const linkActive = 'text-pretzel bg-pretzel/10';
 
 export default function Layout() {
   const { session, logout } = useAuth();
+  const location = useLocation();
+  const [logoSpin, setLogoSpin] = useState(false);
   const { getProfile, save, saveStatus, getStatus } = useProfiles();
   const { myEmpNo, resolveName } = useAppData();
   const { items: anniversaries, refresh: refreshAnniversaries } = useAnniversaries();
@@ -58,10 +61,18 @@ export default function Layout() {
       <header className="sticky top-0 z-30 bg-[#fdfaf3]/90 backdrop-blur border-b border-pretzel/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-8">
-            <span className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight cursor-default select-none">
-              <GiPretzel className="text-2xl text-pretzel animate-wiggle hover:animate-float" />
+            {/* 로고 클릭 시 프레첼이 한 바퀴 스핀 */}
+            <button
+              type="button"
+              onClick={() => setLogoSpin(true)}
+              className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight select-none"
+            >
+              <GiPretzel
+                className={`text-2xl text-pretzel ${logoSpin ? 'animate-spinonce' : 'animate-wiggle'}`}
+                onAnimationEnd={() => logoSpin && setLogoSpin(false)}
+              />
               쪼물랭
-            </span>
+            </button>
             <nav className="hidden sm:flex items-center gap-1">
               <NavLink
                 to="/calendar"
@@ -145,7 +156,10 @@ export default function Layout() {
       </header>
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 pb-24 sm:pb-8">
-        <Outlet />
+        {/* 탭 전환 시 아래서 사르륵 올라오는 등장 */}
+        <div key={location.pathname} className="animate-rise">
+          <Outlet />
+        </div>
       </main>
 
       <nav className="sm:hidden fixed bottom-0 inset-x-0 border-t border-ink-100 bg-white/95 backdrop-blur z-30">
@@ -215,6 +229,9 @@ export default function Layout() {
 
       {/* 접속 시 1회: 오늘의 보고 + 기념일 알림 팝업 */}
       <DailyPopup myId={effectiveEmpNo} />
+
+      {/* 배경에 구름처럼 흘러가는 선 드로잉 빵들 */}
+      <FloatingBreads />
 
       <DevInfo />
     </div>

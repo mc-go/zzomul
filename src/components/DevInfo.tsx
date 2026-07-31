@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { LuCode, LuX, LuExternalLink, LuEye } from 'react-icons/lu';
 import { DailyPopupView } from './DailyPopup';
 import { MEMBER_EMPNOS } from '../lib/members';
+import type { ReportComment } from '../lib/reports';
 
 // 팝업 미리보기용 샘플 데이터 (실제 저장 안 됨)
 function sampleReports() {
@@ -200,6 +201,10 @@ export default function DevInfo() {
                     <Code>reports</Code>: date + author_id(UNIQUE) · content — 오늘의 보고
                   </li>
                   <li>
+                    <Code>report_comments</Code>: report_id + author_id(UNIQUE) · content — 1인
+                    1댓글
+                  </li>
+                  <li>
                     <Code>anniversaries</Code>: owner_id · kind(birthday/hire/wedding/custom) ·
                     date · repeat(매년/100일/일회성) · remind_days(JSON)
                   </li>
@@ -235,14 +240,37 @@ export default function DevInfo() {
         </div>
       ) : null}
 
-      {preview ? (
-        <DailyPopupView
-          reports={sampleReports()}
-          notices={sampleNotices()}
-          onClose={() => setPreview(false)}
-        />
-      ) : null}
+      {preview ? <PreviewPopup onClose={() => setPreview(false)} /> : null}
     </>
+  );
+}
+
+// 샘플 데이터로 팝업을 그대로 띄워보는 미리보기 (댓글도 로컬에서만 동작)
+function PreviewPopup({ onClose }: { onClose: () => void }) {
+  const previewMe = MEMBER_EMPNOS[0];
+  const [comments, setComments] = useState<Record<number, ReportComment[]>>({
+    [-1]: [
+      { id: -10, reportId: -1, authorId: MEMBER_EMPNOS[2], content: '몸조리 잘해요~ 🙌', createdAt: '' },
+    ],
+  });
+
+  return (
+    <DailyPopupView
+      reports={sampleReports()}
+      notices={sampleNotices()}
+      comments={comments}
+      myId={previewMe}
+      onAddComment={async (reportId, content) => {
+        setComments((prev) => ({
+          ...prev,
+          [reportId]: [
+            ...(prev[reportId] ?? []).filter((c) => c.authorId !== previewMe),
+            { id: -999, reportId, authorId: previewMe, content, createdAt: '' },
+          ],
+        }));
+      }}
+      onClose={onClose}
+    />
   );
 }
 

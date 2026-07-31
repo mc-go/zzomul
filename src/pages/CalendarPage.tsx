@@ -24,6 +24,7 @@ import {
   type AnniversaryOccurrence,
 } from '../lib/anniversaries';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
+import { holidayName } from '../lib/holidays';
 import {
   DOT_STYLES,
   KIND_STYLES,
@@ -178,6 +179,7 @@ export default function CalendarPage() {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 const inMonth = isSameMonth(day, cursor);
                 const isToday = isSameDay(day, today);
+                const holiday = holidayName(dateKey);
                 return (
                   <div
                     key={dateKey}
@@ -185,21 +187,30 @@ export default function CalendarPage() {
                       inMonth ? 'bg-white' : 'bg-ink-50/40'
                     } ${isToday ? 'ring-2 ring-inset ring-pretzel' : ''}`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <button
                         type="button"
                         disabled={!inMonth}
                         onClick={() => inMonth && setSelectedDate(day)}
                         className={`text-xs font-medium rounded px-1 -mx-1 hover:bg-ink-50 disabled:cursor-default disabled:hover:bg-transparent ${
                           !inMonth
-                            ? 'text-ink-300'
-                            : isToday
-                              ? 'text-ink-900'
-                              : 'text-ink-700'
+                            ? holiday
+                              ? 'text-red-300'
+                              : 'text-ink-300'
+                            : holiday
+                              ? 'text-red-500'
+                              : isToday
+                                ? 'text-ink-900'
+                                : 'text-ink-700'
                         }`}
                       >
                         {format(day, 'd')}
                       </button>
+                      {holiday && inMonth ? (
+                        <span className="text-[9px] text-red-400 font-medium truncate flex-1" title={holiday}>
+                          {holiday}
+                        </span>
+                      ) : null}
                       {isToday ? (
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-pretzel text-white">
                           오늘
@@ -252,6 +263,7 @@ export default function CalendarPage() {
             {monthDays.map((day) => {
               const dateKey = format(day, 'yyyy-MM-dd');
               const isToday = isSameDay(day, today);
+              const holiday = holidayName(dateKey);
               return (
                 <article
                   key={dateKey}
@@ -263,10 +275,15 @@ export default function CalendarPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedDate(day)}
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-ink-900 hover:opacity-70"
+                      className={`inline-flex items-center gap-2 text-sm font-semibold hover:opacity-70 ${
+                        holiday ? 'text-red-500' : 'text-ink-900'
+                      }`}
                     >
                       {format(day, 'd일 (EEE)', { locale: ko })}
                     </button>
+                    {holiday ? (
+                      <span className="text-[10px] text-red-400 font-medium">{holiday}</span>
+                    ) : null}
                     {isToday ? (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-pretzel text-white">
                         오늘

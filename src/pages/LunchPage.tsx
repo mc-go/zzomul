@@ -89,10 +89,20 @@ export default function LunchPage() {
 
   const memberName = useMemo(() => (id: string) => resolveName(id), [resolveName]);
 
-  const wishlist = useMemo(
-    () => lunches.filter((l) => l.status === 'wishlist').sort((a, b) => b.id - a.id),
-    [lunches],
-  );
+  // 가고싶은 정렬: 런치 먼저 → 디너, 각 그룹 안에선 예정 날짜 있는 게 위(가까운 순), 나머지는 최신순
+  const wishlist = useMemo(() => {
+    const mealRank = (l: Lunch) => (l.meal === 'lunch' ? 0 : 1);
+    return lunches
+      .filter((l) => l.status === 'wishlist')
+      .sort((a, b) => {
+        if (mealRank(a) !== mealRank(b)) return mealRank(a) - mealRank(b);
+        if (!!a.plannedDate !== !!b.plannedDate) return a.plannedDate ? -1 : 1;
+        if (a.plannedDate && b.plannedDate && a.plannedDate !== b.plannedDate) {
+          return a.plannedDate.localeCompare(b.plannedDate);
+        }
+        return b.id - a.id;
+      });
+  }, [lunches]);
   const lunchDone = useMemo(
     () => lunches.filter((l) => l.status === 'done' && l.meal === 'lunch'),
     [lunches],
@@ -332,7 +342,7 @@ function WishlistSection({
           {records.map((item) => (
             <li
               key={item.id}
-              className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 transition-colors"
+              className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 hover:-translate-y-0.5 transition-all"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -502,7 +512,7 @@ function DoneSection({
             return (
               <li
                 key={lunch.id}
-                className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 transition-colors"
+                className="rounded-2xl border border-ink-100 bg-white p-4 shadow-card hover:border-pretzel/40 hover:-translate-y-0.5 transition-all"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -1121,7 +1131,7 @@ function ModalShell({
   return (
     <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-ink-900/40 backdrop-blur-sm p-0 sm:p-4">
       <div
-        className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-lg border border-ink-100 max-h-[90vh] flex flex-col"
+        className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-lg border border-ink-100 max-h-[90vh] flex flex-col overflow-hidden"
         role="dialog"
         aria-modal="true"
       >

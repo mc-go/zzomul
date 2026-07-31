@@ -74,7 +74,11 @@ function StarSlot({
       <LuStar className={`${sizeClass} ${emptyClass}`} strokeWidth={1.5} />
       {step > 0 ? (
         <span
-          className="absolute inset-0 pointer-events-none overflow-hidden"
+          // 편집 모드에서 채워짐 상태가 바뀌면 remount되며 통통 튀는 애니메이션
+          key={readOnly ? undefined : step}
+          className={`absolute inset-0 pointer-events-none overflow-hidden ${
+            readOnly ? '' : 'animate-starpop'
+          }`}
           style={{ width: step === 0.5 ? '50%' : '100%' }}
           aria-hidden
         >

@@ -10,6 +10,15 @@ export type Report = {
   updatedAt: string;
 };
 
+// 보고에 달리는 댓글
+export type ReportComment = {
+  id: number;
+  reportId: number;
+  authorId: string;
+  content: string;
+  createdAt: string;
+};
+
 export async function ensureReportsSchema(): Promise<void> {
   const db = getDb();
   await db.execute(`
@@ -24,6 +33,70 @@ export async function ensureReportsSchema(): Promise<void> {
     )
   `);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_reports_date ON reports(date DESC)`);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS report_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      author_id TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  // 보고 하나에 사람당 댓글 1개 (다시 쓰면 수정)
+  await db.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_report_comments_unique ON report_comments(report_id, author_id)`,
+  );
+}
+
+function rowToComment(row: Record<string, unknown>): ReportComment {
+  return {
+    id: Number(row.id),
+    reportId: Number(row.report_id),
+    authorId: String(row.author_id ?? ''),
+    content: String(row.content ?? ''),
+    createdAt: String(row.created_at ?? ''),
+  };
+}
+
+// 여러 보고의 댓글을 한 번에 조회해 reportId별로 그룹핑
+export async function listCommentsForReports(
+  reportIds: number[],
+): Promise<Record<number, ReportComment[]>> {
+  const map: Record<number, ReportComment[]> = {};
+  if (reportIds.length === 0) return map;
+  const db = getDb();
+  const placeholders = reportIds.map(() => '?').join(',');
+  const res = await db.execute({
+    sql: `SELECT id, report_id, author_id, content, created_at
+          FROM report_comments WHERE report_id IN (${placeholders}) ORDER BY id ASC`,
+    args: reportIds,
+  });
+  for (const row of res.rows) {
+    const c = rowToComment(row as Record<string, unknown>);
+    (map[c.reportId] ??= []).push(c);
+  }
+  return map;
+}
+
+// 댓글 작성/수정 — 같은 보고에 이미 내 댓글이 있으면 내용을 덮어씀
+export async function upsertReportComment(
+  reportId: number,
+  authorId: string,
+  content: string,
+): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `INSERT INTO report_comments (report_id, author_id, content) VALUES (?, ?, ?)
+          ON CONFLICT(report_id, author_id) DO UPDATE SET
+            content = excluded.content,
+            created_at = datetime('now')`,
+    args: [reportId, authorId, content],
+  });
+}
+
+export async function deleteReportComment(id: number): Promise<void> {
+  const db = getDb();
+  await db.execute({ sql: `DELETE FROM report_comments WHERE id = ?`, args: [id] });
 }
 
 function rowToReport(row: Record<string, unknown>): Report {
