@@ -274,14 +274,23 @@ export default function FloatingBreads() {
     <div className="fixed inset-x-0 top-14 bottom-0 -z-10 pointer-events-none overflow-hidden" aria-hidden>
       {BREADS.map(({ Icon, top, size, color, duration, delay, bobDuration, bobDelay }, i) => (
         // 바깥 span: 수평 흐름(cloud) / 안쪽 아이콘: 위아래 둥실둥실(bob)
+        // animation 을 인라인 shorthand로 지정 — 클래스 캐스케이드/스타일 병합 문제로 인해
+        // 특정 세션(예: 게스트 첫 마운트)에서 애니메이션이 정지하는 이슈 방지.
         <span
           key={i}
-          className="absolute left-0 animate-cloud"
-          style={{ top, animationDuration: duration, animationDelay: delay }}
+          className="absolute left-0"
+          style={{
+            top,
+            animation: `cloud ${duration} linear ${delay} infinite`,
+            willChange: 'transform',
+          }}
         >
           <Icon
-            className={`animate-bob ${size} ${color}`}
-            style={{ animationDuration: bobDuration, animationDelay: bobDelay }}
+            className={`${size} ${color}`}
+            style={{
+              animation: `bob ${bobDuration} ease-in-out ${bobDelay} infinite`,
+              willChange: 'transform',
+            }}
           />
         </span>
       ))}
