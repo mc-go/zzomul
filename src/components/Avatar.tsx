@@ -23,11 +23,12 @@ export default function Avatar({ profile, size = 'md', fallbackText, className =
   const color = getAvatarColor(profile?.colorKey);
 
   if (profile?.photo) {
+    // 사진은 투명 배경 유지 — 알파 있는 PNG의 뒷부분이 그대로 비치도록
     return (
       <img
         src={profile.photo}
         alt=""
-        className={`${sz.box} rounded-full object-cover shrink-0 ${className}`}
+        className={`${sz.box} rounded-full object-cover shrink-0 bg-transparent ${className}`}
       />
     );
   }

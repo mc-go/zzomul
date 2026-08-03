@@ -21,7 +21,12 @@ export async function fileToSquareDataUrl(
 
   ctx.drawImage(bitmap, sx, sy, src, src, 0, 0, size, size);
 
-  return canvas.toDataURL('image/jpeg', quality);
+  // 원본이 PNG/WebP처럼 알파 채널이 있을 수 있는 포맷이면 PNG로 저장해서 투명도 보존.
+  // JPEG로 저장하면 투명 부분이 검게 채워짐.
+  const preservesAlpha = /png|webp|gif/i.test(file.type);
+  return preservesAlpha
+    ? canvas.toDataURL('image/png')
+    : canvas.toDataURL('image/jpeg', quality);
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
