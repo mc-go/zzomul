@@ -29,19 +29,19 @@ export async function ensureStatusesSchema(): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_daily_statuses_date ON daily_statuses(date)`,
   );
-  // 기존 profiles.status_message → daily_statuses 로 백필 (idempotent)
+  // 기존 users.status_message → daily_statuses 로 백필 (idempotent)
   try {
     await db.execute(`
       INSERT OR IGNORE INTO daily_statuses (emp_no, date, message)
       SELECT emp_no, status_date, status_message
-      FROM profiles
+      FROM users
       WHERE emp_no != ''
         AND status_date IS NOT NULL
         AND status_date != ''
         AND status_message != ''
     `);
   } catch {
-    // profiles 테이블이 아직 없거나 컬럼이 없을 수 있음 — 무시
+    // users 테이블이 아직 없거나 컬럼이 없을 수 있음 — 무시
   }
 }
 

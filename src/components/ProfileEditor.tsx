@@ -39,7 +39,7 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
   const previewProfile: Profile = {
     id: profileId,
     empNo,
-    email: initial?.email ?? '',
+    name: initial?.name ?? '',
     iconKey,
     colorKey,
     photo,

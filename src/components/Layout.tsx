@@ -46,7 +46,7 @@ export default function Layout() {
       ? {
           id: profileId,
           empNo: myEmpNo,
-          email: session?.username ?? '',
+          name: myEmpNo ? resolveName(myEmpNo) : session?.empNm ?? session?.username ?? '',
           iconKey: 'user',
           colorKey: 'slate',
           photo: '',
@@ -207,7 +207,15 @@ export default function Layout() {
           initial={editorInitial}
           onClose={() => setEditing(false)}
           onSubmit={async ({ statusMessage, ...profileUpdate }) => {
-            await save(profileId, { ...profileUpdate, email: session?.username });
+            // 이름이 폼에서 안 왔으면 자동 resolveName으로 채움
+            const empForName = profileUpdate.empNo || myEmpNo || '';
+            const autoName = empForName
+              ? resolveName(empForName)
+              : session?.empNm ?? session?.username ?? '';
+            await save(profileId, {
+              ...profileUpdate,
+              name: (profileUpdate as { name?: string }).name ?? autoName,
+            });
             const empNoForStatus = profileUpdate.empNo || myEmpNo || '';
             if (empNoForStatus) {
               await saveStatus(empNoForStatus, todayStr, statusMessage);

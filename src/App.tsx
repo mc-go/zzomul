@@ -27,8 +27,8 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <AppDataProvider>
-        <ProfilesProvider>
+      <ProfilesProvider>
+        <AppDataProvider>
         <AnniversariesProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -47,8 +47,8 @@ export default function App() {
           <Route path="*" element={<Navigate to="/calendar" replace />} />
         </Routes>
         </AnniversariesProvider>
-        </ProfilesProvider>
-      </AppDataProvider>
+        </AppDataProvider>
+      </ProfilesProvider>
     </AuthProvider>
   );
 }

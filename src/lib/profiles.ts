@@ -3,7 +3,7 @@ import { getDb } from './db';
 export type Profile = {
   id: string;
   empNo: string;
-  email: string;
+  name: string;
   iconKey: string;
   colorKey: string;
   photo: string;
@@ -22,11 +22,24 @@ export function todayString(): string {
 
 export async function ensureProfilesSchema(): Promise<void> {
   const db = getDb();
+
+  // Legacy → new: 테이블/컬럼 이름 정리 (idempotent).
+  try {
+    await db.execute(`ALTER TABLE profiles RENAME TO users`);
+  } catch {
+    // 이미 리네임됐거나 원본 테이블 없음 — 무시
+  }
+  try {
+    await db.execute(`ALTER TABLE users RENAME COLUMN email TO name`);
+  } catch {
+    // 이미 리네임됐거나 컬럼 없음 — 무시
+  }
+
   await db.execute(`
-    CREATE TABLE IF NOT EXISTS profiles (
+    CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       emp_no TEXT NOT NULL DEFAULT '',
-      email TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
       icon_key TEXT NOT NULL DEFAULT 'user',
       color_key TEXT NOT NULL DEFAULT 'slate',
       photo TEXT NOT NULL DEFAULT '',
@@ -35,11 +48,12 @@ export async function ensureProfilesSchema(): Promise<void> {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-  // 기존 테이블 마이그레이션 (이전 스키마 → 새 컬럼)
+
+  // 오래된 스키마에 대비한 컬럼 백필
   const migrations = [
-    `ALTER TABLE profiles ADD COLUMN photo TEXT NOT NULL DEFAULT ''`,
-    `ALTER TABLE profiles ADD COLUMN emp_no TEXT NOT NULL DEFAULT ''`,
-    `ALTER TABLE profiles ADD COLUMN email TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN photo TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN emp_no TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
   ];
   for (const sql of migrations) {
     try {
@@ -48,7 +62,7 @@ export async function ensureProfilesSchema(): Promise<void> {
       // duplicate column — ignore
     }
   }
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_profiles_emp_no ON profiles(emp_no)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_users_emp_no ON users(emp_no)`);
 }
 
 function rowToProfile(row: Record<string, unknown>): Profile {
@@ -58,7 +72,7 @@ function rowToProfile(row: Record<string, unknown>): Profile {
   return {
     id: String(row.id),
     empNo: String(row.emp_no ?? ''),
-    email: String(row.email ?? ''),
+    name: String(row.name ?? ''),
     iconKey: String(row.icon_key ?? 'user'),
     colorKey: String(row.color_key ?? 'slate'),
     photo: String(row.photo ?? ''),
@@ -71,14 +85,14 @@ function rowToProfile(row: Record<string, unknown>): Profile {
 export async function listProfiles(): Promise<Profile[]> {
   const db = getDb();
   const res = await db.execute(
-    `SELECT id, emp_no, email, icon_key, color_key, photo, status_message, status_date, updated_at FROM profiles`,
+    `SELECT id, emp_no, name, icon_key, color_key, photo, status_message, status_date, updated_at FROM users`,
   );
   return res.rows.map((r) => rowToProfile(r as Record<string, unknown>));
 }
 
 export type ProfileUpdate = {
   empNo?: string;
-  email?: string;
+  name?: string;
   iconKey?: string;
   colorKey?: string;
   photo?: string;
@@ -89,13 +103,13 @@ export async function upsertProfile(id: string, update: ProfileUpdate): Promise<
   const db = getDb();
   const existing = (
     await db.execute({
-      sql: `SELECT emp_no, email, icon_key, color_key, photo, status_message, status_date FROM profiles WHERE id = ?`,
+      sql: `SELECT emp_no, name, icon_key, color_key, photo, status_message, status_date FROM users WHERE id = ?`,
       args: [id],
     })
   ).rows[0] as Record<string, unknown> | undefined;
 
   const empNo = update.empNo !== undefined ? update.empNo : String(existing?.emp_no ?? '');
-  const email = update.email !== undefined ? update.email : String(existing?.email ?? '');
+  const name = update.name !== undefined ? update.name : String(existing?.name ?? '');
   const iconKey = update.iconKey ?? String(existing?.icon_key ?? 'user');
   const colorKey = update.colorKey ?? String(existing?.color_key ?? 'slate');
   const photo = update.photo !== undefined ? update.photo : String(existing?.photo ?? '');
@@ -111,17 +125,17 @@ export async function upsertProfile(id: string, update: ProfileUpdate): Promise<
   }
 
   await db.execute({
-    sql: `INSERT INTO profiles (id, emp_no, email, icon_key, color_key, photo, status_message, status_date, updated_at)
+    sql: `INSERT INTO users (id, emp_no, name, icon_key, color_key, photo, status_message, status_date, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(id) DO UPDATE SET
             emp_no = excluded.emp_no,
-            email = excluded.email,
+            name = excluded.name,
             icon_key = excluded.icon_key,
             color_key = excluded.color_key,
             photo = excluded.photo,
             status_message = excluded.status_message,
             status_date = excluded.status_date,
             updated_at = datetime('now')`,
-    args: [id, empNo, email, iconKey, colorKey, photo, statusMessage, statusDate],
+    args: [id, empNo, name, iconKey, colorKey, photo, statusMessage, statusDate],
   });
 }

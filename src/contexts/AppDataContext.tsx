@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { fetchEmployees, type EmployeeRecord } from '../lib/attendance';
 import { MEMBER_EMPNOS, extraParticipantName } from '../lib/members';
 import { useAuth } from './AuthContext';
+import { useProfiles } from './ProfilesContext';
 
 type AppDataValue = {
   names: Record<string, string>;
@@ -14,6 +15,7 @@ const AppDataContext = createContext<AppDataValue | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
+  const { profiles, save: saveProfile, refresh: refreshProfiles } = useProfiles();
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [namesLoading, setNamesLoading] = useState(false);
 
@@ -37,6 +39,35 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [session?.token, session?.role]);
+
+  // employees API 로드되면 3명 konai 멤버의 사번/이름을 users 테이블에도 동기화.
+  // 이렇게 해두면 게스트가 나중에 로그인해도 users 테이블에서 이름을 읽어옴.
+  useEffect(() => {
+    if (employees.length === 0) return;
+    const konaiMembers = employees.filter((e) =>
+      (MEMBER_EMPNOS as readonly string[]).includes(e.empNo),
+    );
+    let changed = false;
+    const doSync = async () => {
+      for (const m of konaiMembers) {
+        const id = String(m.empId);
+        const existing = profiles[id];
+        if (!existing || existing.name !== m.empNm || existing.empNo !== m.empNo) {
+          try {
+            await saveProfile(id, { empNo: m.empNo, name: m.empNm });
+            changed = true;
+          } catch {
+            // 실패해도 앱 진행에는 지장 없음
+          }
+        }
+      }
+      if (changed) await refreshProfiles();
+    };
+    void doSync();
+    // 의존성에서 profiles/saveProfile 자주 바뀌면 루프 위험 있어서
+    // employees만 트리거로 씀
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees]);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
@@ -63,9 +94,28 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, [session?.role, session?.userId, session?.empNo, employees]);
 
+  // 이름 매핑 우선순위:
+  // 1) EXTRA_PARTICIPANTS (박소현 등)
+  // 2) 현재 세션의 employees API 응답
+  // 3) users 테이블 (다른 사람이 저장해둔 프로필)
+  // 4) 원본 ID (사번) 그대로
+  const profilesByEmpNo = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of Object.values(profiles)) {
+      if (p.empNo && p.name) map[p.empNo] = p.name;
+    }
+    return map;
+  }, [profiles]);
+
   const resolveName = useCallback(
-    (id: string): string => extraParticipantName(id) ?? names[id] ?? id,
-    [names],
+    (id: string): string => {
+      const extra = extraParticipantName(id);
+      if (extra) return extra;
+      if (names[id]) return names[id];
+      if (profilesByEmpNo[id]) return profilesByEmpNo[id];
+      return id;
+    },
+    [names, profilesByEmpNo],
   );
 
   const value = useMemo<AppDataValue>(
