@@ -248,6 +248,7 @@ export default function CalendarPage() {
                           const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
                             (e) => e.id === empNo,
                           );
+                          const hasStatus = getStatus(empNo, dateKey).length > 0;
                           return (
                             <li
                               key={empNo}
@@ -257,7 +258,9 @@ export default function CalendarPage() {
                                   ? 'bg-violet-50 text-violet-700 border-violet-100'
                                   : record
                                     ? KIND_STYLES[kind]
-                                    : 'bg-transparent text-ink-300 border-transparent'
+                                    : hasStatus
+                                      ? 'bg-transparent text-ink-800 border-transparent font-medium'
+                                      : 'bg-transparent text-ink-300 border-transparent'
                               }`}
                               title={record ? `${name} · ${label}` : name}
                             >
@@ -329,6 +332,7 @@ export default function CalendarPage() {
                       const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
                         (e) => e.id === empNo,
                       );
+                      const hasStatus = getStatus(empNo, dateKey).length > 0;
                       return (
                         <li
                           key={empNo}
@@ -338,13 +342,15 @@ export default function CalendarPage() {
                               ? 'bg-violet-50 text-violet-700 border-violet-100'
                               : record
                                 ? KIND_STYLES[kind]
-                                : 'bg-ink-50/40 text-ink-300 border-ink-100'
+                                : hasStatus
+                                  ? 'bg-white text-ink-800 border-ink-100'
+                                  : 'bg-ink-50/40 text-ink-300 border-ink-100'
                           }`}
                         >
                           <Avatar profile={profile} size="xs" fallbackText={name} />
                           <span className="font-medium">{name}</span>
                           <span className="ml-auto">
-                            {isExtra ? '게스트' : label || '기록 없음'}
+                            {isExtra ? '게스트' : label || (hasStatus ? '메시지' : '기록 없음')}
                           </span>
                         </li>
                       );
