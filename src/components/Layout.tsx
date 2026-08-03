@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift } from 'react-icons/lu';
+import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift, LuUserRound, LuMessageSquare } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
@@ -8,6 +8,7 @@ import { useAppData } from '../contexts/AppDataContext';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
 import Avatar from './Avatar';
 import ProfileEditor from './ProfileEditor';
+import StatusEditor from './StatusEditor';
 import DevInfo from './DevInfo';
 import DailyPopup from './DailyPopup';
 import AnniversaryManager from './AnniversaryManager';
@@ -26,6 +27,8 @@ export default function Layout() {
   const { myEmpNo, resolveName } = useAppData();
   const { items: anniversaries, refresh: refreshAnniversaries } = useAnniversaries();
   const [editing, setEditing] = useState(false);
+  const [statusEditing, setStatusEditing] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [annivOpen, setAnnivOpen] = useState(false);
 
@@ -99,18 +102,52 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => profileId && setEditing(true)}
-              disabled={!profileId}
-              className="flex items-center gap-2 h-10 pl-1 pr-2.5 rounded-full hover:bg-ink-50 transition-colors disabled:opacity-50"
-              title="내 프로필 편집"
-            >
-              <Avatar profile={myProfile} size="sm" fallbackText={session?.username} />
-              <span className="hidden sm:inline text-xs text-ink-500 max-w-[140px] truncate">
-                {session?.username}
-              </span>
-            </button>
+            {/* 프로필 메뉴 (프로필 편집 / 오늘의 상태메세지) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => profileId && setProfileMenuOpen((v) => !v)}
+                disabled={!profileId}
+                className="flex items-center gap-2 h-10 pl-1 pr-2.5 rounded-full hover:bg-ink-50 transition-colors disabled:opacity-50"
+                title="내 프로필 메뉴"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+              >
+                <Avatar profile={myProfile} size="sm" fallbackText={session?.username} />
+                <span className="hidden sm:inline text-xs text-ink-500 max-w-[140px] truncate">
+                  {session?.username}
+                </span>
+              </button>
+              {profileMenuOpen ? (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setProfileMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-40 w-48 rounded-lg border border-ink-100 bg-white shadow-lg py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        setStatusEditing(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                    >
+                      <LuMessageSquare className="text-sm" />
+                      오늘의 상태메세지
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        setEditing(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                    >
+                      <LuUserRound className="text-sm" />
+                      프로필 편집
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
             {/* 설정 메뉴 (기념일 설정 등) */}
             <div className="relative">
               <button
@@ -199,6 +236,21 @@ export default function Layout() {
           </NavLink>
         </div>
       </nav>
+
+      {statusEditing && profileId ? (
+        <StatusEditor
+          displayName={displayName}
+          profile={myProfile}
+          initialMessage={todaysStatus}
+          onClose={() => setStatusEditing(false)}
+          onSubmit={async (message) => {
+            if (effectiveEmpNo) {
+              await saveStatus(effectiveEmpNo, todayStr, message);
+            }
+            setStatusEditing(false);
+          }}
+        />
+      ) : null}
 
       {editing && profileId ? (
         <ProfileEditor
