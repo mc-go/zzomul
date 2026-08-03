@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuX } from 'react-icons/lu';
+import { LuX, LuTrash2 } from 'react-icons/lu';
 import Avatar from './Avatar';
 import type { Profile } from '../lib/profiles';
 
@@ -27,6 +27,7 @@ export default function StatusEditor({
   const [err, setErr] = useState<string | null>(null);
 
   const todayLabel = format(new Date(), 'yyyy년 M월 d일 (EEE)', { locale: ko });
+  const hasExisting = initialMessage.trim().length > 0;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -41,6 +42,19 @@ export default function StatusEditor({
       await onSubmit(message.trim());
     } catch (e) {
       setErr(e instanceof Error ? e.message : '저장 실패');
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (busy) return;
+    if (!confirm('오늘 남긴 상태 메시지를 삭제할까요?')) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onSubmit(''); // 빈 문자열이면 서버에서 DELETE 처리됨
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '삭제 실패');
       setBusy(false);
     }
   }
@@ -80,7 +94,7 @@ export default function StatusEditor({
           <div>
             <div className="flex items-baseline justify-between mb-1.5">
               <label htmlFor="status-msg" className="text-xs font-medium text-ink-500">
-                메시지
+                메시지 {hasExisting ? <span className="text-ink-400">· 수정</span> : null}
               </label>
               <span className="text-[10px] text-ink-400">
                 매일 자정 초기화 · {message.length}/{STATUS_MAX}
@@ -104,22 +118,37 @@ export default function StatusEditor({
           ) : null}
         </form>
 
-        <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-ink-100 bg-white">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 px-4 text-sm rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-50"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            onClick={submit}
-            disabled={busy}
-            className="h-10 px-4 text-sm rounded-md bg-ink-900 text-white hover:bg-ink-700 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {busy ? '저장 중...' : '저장'}
-          </button>
+        <footer className="flex items-center justify-between gap-2 px-5 py-3 border-t border-ink-100 bg-white">
+          <div>
+            {hasExisting ? (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={busy}
+                className="inline-flex items-center gap-1 h-10 px-3 text-xs text-red-600 hover:bg-red-50 rounded-md disabled:opacity-50"
+              >
+                <LuTrash2 className="text-sm" />
+                삭제
+              </button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 px-4 text-sm rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-50"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              onClick={submit}
+              disabled={busy}
+              className="h-10 px-4 text-sm rounded-md bg-ink-900 text-white hover:bg-ink-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {busy ? '저장 중...' : '저장'}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

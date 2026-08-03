@@ -20,18 +20,14 @@ type Props = {
     iconKey: string;
     colorKey: string;
     photo: string;
-    statusMessage: string;
   }) => Promise<void>;
 };
-
-const STATUS_MAX = 40;
 
 export default function ProfileEditor({ profileId, displayName, initial, onClose, onSubmit }: Props) {
   const [empNo, setEmpNo] = useState<string>(initial?.empNo ?? '');
   const [iconKey, setIconKey] = useState<string>(initial?.iconKey ?? 'user');
   const [colorKey, setColorKey] = useState<string>(initial?.colorKey ?? 'slate');
   const [photo, setPhoto] = useState<string>(initial?.photo ?? '');
-  const [statusMessage, setStatusMessage] = useState<string>(initial?.statusMessage ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,10 +59,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
-    if (statusMessage.length > STATUS_MAX) {
-      setErr(`상태 메시지는 ${STATUS_MAX}자 이내로 써 주세요.`);
-      return;
-    }
     setBusy(true);
     setErr(null);
     try {
@@ -75,7 +67,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
         iconKey,
         colorKey,
         photo: photo.trim(),
-        statusMessage: statusMessage.trim(),
       });
     } catch (e) {
       setErr(e instanceof Error ? e.message : '저장 실패');
@@ -122,16 +113,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
               onChange={(e) => setEmpNo(e.target.value.trim())}
               placeholder="예: 2023124"
               inputMode="numeric"
-              className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
-            />
-          </FieldBlock>
-
-          <FieldBlock label="상태 메시지" hint={`매일 자정 자동 초기화 · ${statusMessage.length}/${STATUS_MAX}`}>
-            <input
-              type="text"
-              value={statusMessage}
-              onChange={(e) => setStatusMessage(e.target.value.slice(0, STATUS_MAX))}
-              placeholder="오늘의 한마디"
               className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
             />
           </FieldBlock>

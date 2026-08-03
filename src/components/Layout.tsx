@@ -258,7 +258,7 @@ export default function Layout() {
           displayName={displayName}
           initial={editorInitial}
           onClose={() => setEditing(false)}
-          onSubmit={async ({ statusMessage, ...profileUpdate }) => {
+          onSubmit={async (profileUpdate) => {
             // 이름이 폼에서 안 왔으면 자동 resolveName으로 채움
             const empForName = profileUpdate.empNo || myEmpNo || '';
             const autoName = empForName
@@ -268,10 +268,6 @@ export default function Layout() {
               ...profileUpdate,
               name: (profileUpdate as { name?: string }).name ?? autoName,
             });
-            const empNoForStatus = profileUpdate.empNo || myEmpNo || '';
-            if (empNoForStatus) {
-              await saveStatus(empNoForStatus, todayStr, statusMessage);
-            }
             setEditing(false);
           }}
         />
