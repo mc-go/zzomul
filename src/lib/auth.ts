@@ -1,8 +1,13 @@
+import { verifyLocalUser } from './local-users';
+
 const API_BASE = 'https://atdapi.duallmaster.com';
 const STORAGE_KEY = 'zzomul.session.v1';
 
+export type Role = 'konai' | 'guest';
+
 export type Session = {
-  token: string;
+  token: string;              // 듀얼아이 JWT (guest는 빈 문자열)
+  role: Role;
   username: string;
   empNo?: string;
   empNm?: string;
@@ -16,7 +21,9 @@ export function readSession(): Session | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Session;
-    if (!parsed?.token) return null;
+    if (!parsed?.username) return null;
+    // 이전 버전 호환: role 없으면 konai로 간주
+    if (!parsed.role) parsed.role = 'konai';
     return parsed;
   } catch {
     return null;
@@ -31,7 +38,7 @@ export function clearSession() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export async function login(username: string, password: string): Promise<Session> {
+export async function loginDuall(username: string, password: string): Promise<Session> {
   const res = await fetch(`${API_BASE}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,8 +51,6 @@ export async function login(username: string, password: string): Promise<Session
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-
-  // 진단용 로그: 로그인 응답에 어떤 필드가 오는지 콘솔에서 확인 가능
   console.log('[login response keys]', Object.keys(data));
 
   const token = typeof data.authToken === 'string' ? data.authToken : null;
@@ -57,6 +62,7 @@ export async function login(username: string, password: string): Promise<Session
 
   const session: Session = {
     token,
+    role: 'konai',
     username: asString(data.username) ?? username,
     empNo: asString(data.empNo),
     empNm: asString(data.empNm),
@@ -67,6 +73,26 @@ export async function login(username: string, password: string): Promise<Session
   writeSession(session);
   return session;
 }
+
+export async function loginGuest(username: string, password: string): Promise<Session> {
+  const user = await verifyLocalUser(username, password);
+  if (!user) throw new Error('아이디 또는 비밀번호가 올바르지 않아요.');
+
+  const session: Session = {
+    token: '',
+    role: user.role,
+    username: user.username,
+    userId: user.username,
+    empNo: user.participantId || undefined,
+    empNm: user.displayName || undefined,
+    savedAt: Date.now(),
+  };
+  writeSession(session);
+  return session;
+}
+
+// 이전 코드가 login()을 임포트하는 경우를 위해 alias 유지
+export const login = loginDuall;
 
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

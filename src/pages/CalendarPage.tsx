@@ -32,7 +32,7 @@ import {
   kindFor,
   labelFor,
 } from '../lib/attendance-status';
-import { MEMBER_EMPNOS, type MemberEmpNo } from '../lib/members';
+import { EXTRA_PARTICIPANTS, MEMBER_EMPNOS, type MemberEmpNo } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
@@ -52,7 +52,7 @@ const ANNIV_STYLES: Record<AnniversaryKind, string> = {
 
 export default function CalendarPage() {
   const { session, logout } = useAuth();
-  const { getProfileByEmpNo } = useProfiles();
+  const { getProfileByEmpNo, getStatus } = useProfiles();
   const { resolveName } = useAppData();
   const { items: anniversaries } = useAnniversaries();
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
@@ -66,7 +66,11 @@ export default function CalendarPage() {
   const monthEnd = useMemo(() => endOfMonth(cursor), [cursor]);
 
   useEffect(() => {
-    if (!session?.token) return;
+    // 게스트는 듀얼아이 토큰이 없으므로 근태 조회 스킵. UI만 렌더링됨.
+    if (!session?.token || session.role !== 'konai') {
+      setRecords([]);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -89,7 +93,7 @@ export default function CalendarPage() {
     return () => {
       cancelled = true;
     };
-  }, [session?.token, monthStart, monthEnd, logout]);
+  }, [session?.token, session?.role, monthStart, monthEnd, logout]);
 
   const byMember = useMemo(() => indexByMemberAndDate(records), [records]);
   const kindsInMonth = useMemo(() => {
@@ -230,18 +234,30 @@ export default function CalendarPage() {
                     ))}
                     {inMonth ? (
                       <ul className="space-y-1">
-                        {MEMBER_EMPNOS.map((empNo) => {
-                          const record = byMember[empNo]?.[dateKey];
+                        {[
+                          ...MEMBER_EMPNOS,
+                          ...EXTRA_PARTICIPANTS.filter((e) => getStatus(e.id, dateKey)).map(
+                            (e) => e.id,
+                          ),
+                        ].map((empNo) => {
+                          const record = (byMember as Record<string, Record<string, AttendanceRecord | undefined> | undefined>)[empNo]?.[dateKey];
                           const kind = record ? kindFor(record.attendanceStatus) : 'other';
                           const label = record ? labelFor(record.attendanceStatus) : '';
                           const name = resolveName(empNo);
                           const profile = getProfileByEmpNo(empNo);
+                          const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
+                            (e) => e.id === empNo,
+                          );
                           return (
                             <li
                               key={empNo}
                               onClick={() => setSelected({ empNo, date: day, record: record ?? null })}
                               className={`flex items-center gap-1.5 text-[11px] leading-tight pl-1 pr-1.5 py-0.5 rounded border cursor-pointer hover:brightness-95 ${
-                                record ? KIND_STYLES[kind] : 'bg-transparent text-ink-300 border-transparent'
+                                isExtra
+                                  ? 'bg-violet-50 text-violet-700 border-violet-100'
+                                  : record
+                                    ? KIND_STYLES[kind]
+                                    : 'bg-transparent text-ink-300 border-transparent'
                               }`}
                               title={record ? `${name} · ${label}` : name}
                             >
@@ -299,23 +315,37 @@ export default function CalendarPage() {
                     ))}
                   </header>
                   <ul className="grid grid-cols-1 gap-1.5">
-                    {MEMBER_EMPNOS.map((empNo) => {
-                      const record = byMember[empNo]?.[dateKey];
+                    {[
+                      ...MEMBER_EMPNOS,
+                      ...EXTRA_PARTICIPANTS.filter((e) => getStatus(e.id, dateKey)).map(
+                        (e) => e.id,
+                      ),
+                    ].map((empNo) => {
+                      const record = (byMember as Record<string, Record<string, AttendanceRecord | undefined> | undefined>)[empNo]?.[dateKey];
                       const kind = record ? kindFor(record.attendanceStatus) : 'other';
                       const label = record ? labelFor(record.attendanceStatus) : '';
                       const name = resolveName(empNo);
                       const profile = getProfileByEmpNo(empNo);
+                      const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
+                        (e) => e.id === empNo,
+                      );
                       return (
                         <li
                           key={empNo}
                           onClick={() => setSelected({ empNo, date: day, record: record ?? null })}
                           className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-md border cursor-pointer active:brightness-95 ${
-                            record ? KIND_STYLES[kind] : 'bg-ink-50/40 text-ink-300 border-ink-100'
+                            isExtra
+                              ? 'bg-violet-50 text-violet-700 border-violet-100'
+                              : record
+                                ? KIND_STYLES[kind]
+                                : 'bg-ink-50/40 text-ink-300 border-ink-100'
                           }`}
                         >
                           <Avatar profile={profile} size="xs" fallbackText={name} />
                           <span className="font-medium">{name}</span>
-                          <span className="ml-auto">{label || '기록 없음'}</span>
+                          <span className="ml-auto">
+                            {isExtra ? '게스트' : label || '기록 없음'}
+                          </span>
                         </li>
                       );
                     })}

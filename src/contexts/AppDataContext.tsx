@@ -18,7 +18,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [namesLoading, setNamesLoading] = useState(false);
 
   useEffect(() => {
-    if (!session?.token) {
+    // 게스트는 듀얼아이 토큰이 없으므로 employees 조회 스킵
+    if (!session?.token || session.role !== 'konai') {
       setEmployees([]);
       return;
     }
@@ -35,7 +36,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session?.token]);
+  }, [session?.token, session?.role]);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
@@ -47,9 +48,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return map;
   }, [employees]);
 
-  // 로그인 응답의 userId를 employees[].empId와 대조해서 내 사번 자동 감지.
-  // 매칭 실패 시 null → 사용자가 프로필 편집에서 수동 입력해야 함.
+  // 게스트는 세션에 담긴 participant_id(=empNo)를 그대로 사용.
+  // 코나이(듀얼아이)는 employees[].empId ↔ session.userId 매칭으로 자동 감지.
   const myEmpNo = useMemo(() => {
+    if (session?.role === 'guest') return session?.empNo ?? null;
     const uid = session?.userId;
     if (!uid || employees.length === 0) return null;
     const match = employees.find((e) => String(e.empId) === String(uid));
@@ -59,7 +61,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
     console.log('[me detection] userId', uid, 'not found in employees list');
     return null;
-  }, [session?.userId, employees]);
+  }, [session?.role, session?.userId, session?.empNo, employees]);
 
   const resolveName = useCallback(
     (id: string): string => extraParticipantName(id) ?? names[id] ?? id,

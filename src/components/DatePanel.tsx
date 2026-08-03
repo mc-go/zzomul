@@ -4,7 +4,7 @@ import { LuX } from 'react-icons/lu';
 import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
-import { MEMBER_EMPNOS } from '../lib/members';
+import { MEMBER_EMPNOS, EXTRA_PARTICIPANTS } from '../lib/members';
 import { KIND_STYLES, kindFor, labelFor } from '../lib/attendance-status';
 import type { AttendanceRecord } from '../lib/attendance';
 
@@ -55,13 +55,20 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
         </header>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-          {MEMBER_EMPNOS.map((empNo) => {
+          {[
+            ...MEMBER_EMPNOS,
+            // 게스트/퇴사자는 그 날짜에 상태 메시지 있을 때만 노출
+            ...EXTRA_PARTICIPANTS.filter((e) => getStatus(e.id, dateStr)).map((e) => e.id),
+          ].map((empNo) => {
             const record = recordsByEmpNo[empNo] ?? null;
             const profile = getProfileByEmpNo(empNo);
             const name = resolveName(empNo);
             const kind = record ? kindFor(record.attendanceStatus) : 'other';
             const label = record ? labelFor(record.attendanceStatus) : '기록 없음';
             const statusMessage = getStatus(empNo, dateStr);
+            const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
+              (e) => e.id === empNo,
+            );
 
             return (
               <div
@@ -72,11 +79,17 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-ink-900">{name}</span>
-                    <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${KIND_STYLES[kind]}`}
-                    >
-                      {label}
-                    </span>
+                    {isExtra ? (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-violet-50 text-violet-600 border-violet-100">
+                        게스트
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${KIND_STYLES[kind]}`}
+                      >
+                        {label}
+                      </span>
+                    )}
                   </div>
                   {record?.scheduleTime ? (
                     <p className="text-[11px] text-ink-400 mt-0.5">{record.scheduleTime}</p>
