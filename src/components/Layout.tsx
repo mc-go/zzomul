@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift, LuUserRound, LuMessageSquare } from 'react-icons/lu';
+import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift, LuUserRound, LuMessageSquare, LuStickyNote } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
@@ -97,6 +97,13 @@ export default function Layout() {
               >
                 <LuMegaphone className="text-base" />
                 보고
+              </NavLink>
+              <NavLink
+                to="/memo"
+                className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}
+              >
+                <LuStickyNote className="text-base" />
+                아무거나
               </NavLink>
             </nav>
           </div>
@@ -200,7 +207,7 @@ export default function Layout() {
       </main>
 
       <nav className="sm:hidden fixed bottom-0 inset-x-0 border-t border-ink-100 bg-white/95 backdrop-blur z-30">
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           <NavLink
             to="/calendar"
             className={({ isActive }) =>
@@ -233,6 +240,17 @@ export default function Layout() {
           >
             <LuMegaphone className="text-lg" />
             보고
+          </NavLink>
+          <NavLink
+            to="/memo"
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+                isActive ? 'text-pretzel' : 'text-ink-400'
+              }`
+            }
+          >
+            <LuStickyNote className="text-lg" />
+            아무거나
           </NavLink>
         </div>
       </nav>
