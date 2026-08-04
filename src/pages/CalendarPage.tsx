@@ -24,6 +24,7 @@ import {
   type AnniversaryOccurrence,
 } from '../lib/anniversaries';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
+import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
 import { holidayName } from '../lib/holidays';
 import {
   DOT_STYLES,
@@ -61,6 +62,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ empNo: string; date: Date; record: AttendanceRecord | null } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [calendarLunches, setCalendarLunches] = useState<Lunch[]>([]);
 
   const monthStart = useMemo(() => startOfMonth(cursor), [cursor]);
   const monthEnd = useMemo(() => endOfMonth(cursor), [cursor]);
@@ -94,6 +96,40 @@ export default function CalendarPage() {
       cancelled = true;
     };
   }, [session?.token, session?.role, monthStart, monthEnd, logout]);
+
+  // 먹기록을 캘린더에 함께 표시:
+  //  - '가고싶은' + 예정 날짜(plannedDate) 있는 것 → 예정 스타일
+  //  - '다녀옴'(done) 전부 → 그 날짜(date)에 매핑
+  useEffect(() => {
+    let cancelled = false;
+    ensureLunchesSchema()
+      .then(() => listLunches())
+      .then((all) => {
+        if (cancelled) return;
+        setCalendarLunches(
+          all.filter(
+            (l) => (l.status === 'wishlist' && l.plannedDate) || l.status === 'done',
+          ),
+        );
+      })
+      .catch(() => {
+        /* 실패해도 캘린더 자체는 정상 렌더 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 각 먹기록이 캘린더에 얹힐 날짜 (wishlist는 plannedDate, done은 date)
+  const lunchesByDate = useMemo(() => {
+    const map: Record<string, Lunch[]> = {};
+    for (const l of calendarLunches) {
+      const key = l.status === 'wishlist' ? l.plannedDate : l.date;
+      if (!key) continue;
+      (map[key] ??= []).push(l);
+    }
+    return map;
+  }, [calendarLunches]);
 
   const byMember = useMemo(() => indexByMemberAndDate(records), [records]);
   const kindsInMonth = useMemo(() => {
@@ -232,6 +268,17 @@ export default function CalendarPage() {
                         {a.emoji} {a.text}
                       </div>
                     ))}
+                    {lunchesByDate[dateKey]?.map((l) => (
+                      <div
+                        key={`lunch-${l.id}`}
+                        className={`text-[10px] leading-tight px-1.5 py-0.5 rounded-full border truncate ${lunchBadgeStyle(l)} ${
+                          inMonth ? '' : 'opacity-50'
+                        }`}
+                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'} · ${l.restaurant}${l.menu ? ` (${l.menu})` : ''}`}
+                      >
+                        {l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                      </div>
+                    ))}
                     {inMonth ? (
                       <ul className="space-y-1">
                         {[
@@ -316,6 +363,15 @@ export default function CalendarPage() {
                         {a.emoji} {a.text}
                       </span>
                     ))}
+                    {lunchesByDate[dateKey]?.map((l) => (
+                      <span
+                        key={`lunch-${l.id}`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full border ${lunchBadgeStyle(l)}`}
+                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'} · ${l.restaurant}`}
+                      >
+                        {l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                      </span>
+                    ))}
                   </header>
                   <ul className="grid grid-cols-1 gap-1.5">
                     {[
@@ -395,6 +451,19 @@ export default function CalendarPage() {
       ) : null}
     </div>
   );
+}
+
+// 먹기록 뱃지 색: 런치/디너 × 예정/다녀옴 조합
+function lunchBadgeStyle(l: Lunch): string {
+  const isPlanned = l.status === 'wishlist';
+  if (l.meal === 'lunch') {
+    return isPlanned
+      ? 'bg-white text-amber-700 border-amber-300 border-dashed'
+      : 'bg-amber-50 text-amber-700 border-amber-100';
+  }
+  return isPlanned
+    ? 'bg-white text-accent border-accent/40 border-dashed'
+    : 'bg-accent-soft text-accent border-accent/20';
 }
 
 function Legend({ visibleKinds }: { visibleKinds: Set<string> }) {
