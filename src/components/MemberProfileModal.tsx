@@ -1,11 +1,12 @@
 import { LuX } from 'react-icons/lu';
+import { FaHeart } from 'react-icons/fa';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { kindFor, labelFor, KIND_STYLES } from '../lib/attendance-status';
-import type { AttendanceRecord } from '../lib/attendance';
+import { isLateArrival, type AttendanceRecord } from '../lib/attendance';
 
 type Props = {
   empNo: string;
@@ -26,7 +27,15 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
     ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     : '';
   const statusMessage = dateStr ? getStatus(empNo, dateStr) : '';
-  const scheduleTime = record?.scheduleTime ?? '';
+  // 오늘 이전 날짜는 실제 근무시간(workTime), 오늘/미래는 예정 근무시간(scheduleTime)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isPast = date ? new Date(date.getFullYear(), date.getMonth(), date.getDate()) < today : false;
+  const timeToShow = isPast
+    ? (record?.workTime || record?.scheduleTime || '')
+    : (record?.scheduleTime ?? '');
+  const late =
+    !!record && kind === 'work' && isLateArrival(record.workTime, record.scheduleTime);
 
   return (
     <div
@@ -60,12 +69,18 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
             >
               {label}
             </span>
+            {late ? (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-red-100 bg-red-50 text-red-600 inline-flex items-center gap-1">
+                지각
+                <FaHeart className="text-red-500 text-[10px]" />
+              </span>
+            ) : null}
           </div>
 
           {date ? (
             <p className="text-[11px] text-ink-400 mt-1">
               {format(date, 'yyyy년 M월 d일 (EEE)', { locale: ko })} 기준
-              {scheduleTime ? ` · ${scheduleTime}` : ''}
+              {timeToShow ? ` · ${timeToShow}` : ''}
             </p>
           ) : null}
 

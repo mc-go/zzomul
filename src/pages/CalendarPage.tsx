@@ -13,6 +13,7 @@ import {
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { LuChevronLeft, LuChevronRight, LuLoader } from 'react-icons/lu';
+import { FaHeart } from 'react-icons/fa';
 import {
   fetchAttendances,
   indexByMemberAndDate,
@@ -324,7 +325,10 @@ export default function CalendarPage() {
                               <span className="truncate">{name}</span>
                               <span className="ml-auto inline-flex items-center gap-1">
                                 {late ? (
-                                  <span className="text-[10px] font-semibold text-red-600">지각</span>
+                                  <span className="text-[10px] font-semibold text-red-600 inline-flex items-center gap-0.5">
+                                    지각
+                                    <FaHeart className="text-red-500 text-[9px]" />
+                                  </span>
                                 ) : null}
                                 {label ? <span className="text-[10px]">{label}</span> : null}
                               </span>
@@ -425,7 +429,10 @@ export default function CalendarPage() {
                           <span className="font-medium">{name}</span>
                           <span className="ml-auto inline-flex items-center gap-1.5">
                             {late ? (
-                              <span className="text-[11px] font-semibold text-red-600">지각</span>
+                              <span className="text-[11px] font-semibold text-red-600 inline-flex items-center gap-0.5">
+                                지각
+                                <FaHeart className="text-red-500 text-[10px]" />
+                              </span>
                             ) : null}
                             <span>
                               {isExtra ? '게스트' : label || (hasStatus ? '메시지' : '기록 없음')}
