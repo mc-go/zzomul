@@ -16,6 +16,7 @@ import { LuChevronLeft, LuChevronRight, LuLoader } from 'react-icons/lu';
 import {
   fetchAttendances,
   indexByMemberAndDate,
+  isLateArrival,
   type AttendanceRecord,
 } from '../lib/attendance';
 import {
@@ -296,6 +297,10 @@ export default function CalendarPage() {
                             (e) => e.id === empNo,
                           );
                           const hasStatus = getStatus(empNo, dateKey).length > 0;
+                          const late =
+                            !!record &&
+                            kind === 'work' &&
+                            isLateArrival(record.workTime, record.scheduleTime);
                           return (
                             <li
                               key={empNo}
@@ -309,11 +314,20 @@ export default function CalendarPage() {
                                       ? 'bg-transparent text-ink-800 border-transparent font-medium'
                                       : 'bg-transparent text-ink-300 border-transparent'
                               }`}
-                              title={record ? `${name} · ${label}` : name}
+                              title={
+                                record
+                                  ? `${name} · ${label}${late ? ` (지각: ${record.workTime})` : ''}`
+                                  : name
+                              }
                             >
                               <Avatar profile={profile} size="xs" fallbackText={name} />
                               <span className="truncate">{name}</span>
-                              {label ? <span className="ml-auto text-[10px]">{label}</span> : null}
+                              <span className="ml-auto inline-flex items-center gap-1">
+                                {late ? (
+                                  <span className="text-[10px] font-semibold text-red-600">지각</span>
+                                ) : null}
+                                {label ? <span className="text-[10px]">{label}</span> : null}
+                              </span>
                             </li>
                           );
                         })}
@@ -389,6 +403,10 @@ export default function CalendarPage() {
                         (e) => e.id === empNo,
                       );
                       const hasStatus = getStatus(empNo, dateKey).length > 0;
+                      const late =
+                        !!record &&
+                        kind === 'work' &&
+                        isLateArrival(record.workTime, record.scheduleTime);
                       return (
                         <li
                           key={empNo}
@@ -405,8 +423,13 @@ export default function CalendarPage() {
                         >
                           <Avatar profile={profile} size="xs" fallbackText={name} />
                           <span className="font-medium">{name}</span>
-                          <span className="ml-auto">
-                            {isExtra ? '게스트' : label || (hasStatus ? '메시지' : '기록 없음')}
+                          <span className="ml-auto inline-flex items-center gap-1.5">
+                            {late ? (
+                              <span className="text-[11px] font-semibold text-red-600">지각</span>
+                            ) : null}
+                            <span>
+                              {isExtra ? '게스트' : label || (hasStatus ? '메시지' : '기록 없음')}
+                            </span>
                           </span>
                         </li>
                       );

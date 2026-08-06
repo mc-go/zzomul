@@ -60,6 +60,30 @@ export async function fetchEmployees(token: string): Promise<EmployeeRecord[]> {
   return apiGet<EmployeeRecord[]>('/attendance/employees', token);
 }
 
+// "오전 8:30" / "오후 5:30" 같은 한국어 시각을 자정 기준 분(minute)으로 변환.
+// 파싱 실패 시 null.
+export function parseKoreanTimeToMinutes(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const m = s.match(/(오전|오후)\s*(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const meridiem = m[1];
+  let h = Number(m[2]);
+  const min = Number(m[3]);
+  if (isNaN(h) || isNaN(min)) return null;
+  if (meridiem === '오후' && h !== 12) h += 12;
+  if (meridiem === '오전' && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+// workTime 시작이 scheduleTime 시작보다 늦으면 지각.
+// 둘 중 하나라도 파싱 실패면 false (판단 불가).
+export function isLateArrival(workTime: string, scheduleTime: string): boolean {
+  const actual = parseKoreanTimeToMinutes(workTime);
+  const scheduled = parseKoreanTimeToMinutes(scheduleTime);
+  if (actual == null || scheduled == null) return false;
+  return actual > scheduled;
+}
+
 export async function fetchTrackedNames(token: string): Promise<Record<string, string>> {
   const all = await fetchEmployees(token);
   const map: Record<string, string> = {};

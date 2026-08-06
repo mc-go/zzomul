@@ -9,6 +9,7 @@ export type StatusDef = {
 
 export const STATUS_MAP: Record<number, StatusDef> = {
   1: { code: 1, label: '근무', kind: 'work', priority: 10 },
+  2: { code: 2, label: '근무', kind: 'work', priority: 10 },
   70005: { code: 70005, label: '반차', kind: 'half', priority: 40 },
   70006: { code: 70006, label: '휴가', kind: 'off', priority: 60 },
   70012: { code: 70012, label: '안식휴가', kind: 'sabbatical', priority: 70 },
