@@ -277,14 +277,13 @@ export default function Layout() {
           initial={editorInitial}
           onClose={() => setEditing(false)}
           onSubmit={async (profileUpdate) => {
-            // 이름이 폼에서 안 왔으면 자동 resolveName으로 채움
-            const empForName = profileUpdate.empNo || myEmpNo || '';
-            const autoName = empForName
-              ? resolveName(empForName)
+            // empNo는 사용자가 편집 못 함 — employees API 기반 자동 sync만 사용
+            const autoName = myEmpNo
+              ? resolveName(myEmpNo)
               : session?.empNm ?? session?.username ?? '';
             await save(profileId, {
               ...profileUpdate,
-              name: (profileUpdate as { name?: string }).name ?? autoName,
+              name: autoName,
             });
             setEditing(false);
           }}

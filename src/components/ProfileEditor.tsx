@@ -16,7 +16,6 @@ type Props = {
   initial: Profile | null;
   onClose: () => void;
   onSubmit: (update: {
-    empNo: string;
     iconKey: string;
     colorKey: string;
     photo: string;
@@ -24,7 +23,6 @@ type Props = {
 };
 
 export default function ProfileEditor({ profileId, displayName, initial, onClose, onSubmit }: Props) {
-  const [empNo, setEmpNo] = useState<string>(initial?.empNo ?? '');
   const [iconKey, setIconKey] = useState<string>(initial?.iconKey ?? 'user');
   const [colorKey, setColorKey] = useState<string>(initial?.colorKey ?? 'slate');
   const [photo, setPhoto] = useState<string>(initial?.photo ?? '');
@@ -34,7 +32,7 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
 
   const previewProfile: Profile = {
     id: profileId,
-    empNo,
+    empNo: initial?.empNo ?? '',
     name: initial?.name ?? '',
     iconKey,
     colorKey,
@@ -63,7 +61,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
     setErr(null);
     try {
       await onSubmit({
-        empNo: empNo.trim(),
         iconKey,
         colorKey,
         photo: photo.trim(),
@@ -105,17 +102,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
               </p>
             </div>
           </div>
-
-          <FieldBlock label="본인 사번" hint="캘린더 표시 연동용. 한 번만 설정.">
-            <input
-              type="text"
-              value={empNo}
-              onChange={(e) => setEmpNo(e.target.value.trim())}
-              placeholder="예: 2023124"
-              inputMode="numeric"
-              className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
-            />
-          </FieldBlock>
 
           <FieldBlock label="사진 (선택)" hint="URL을 붙여넣거나 파일을 업로드하세요">
             <div className="space-y-2">
