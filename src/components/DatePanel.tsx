@@ -6,17 +6,19 @@ import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { MEMBER_EMPNOS, EXTRA_PARTICIPANTS } from '../lib/members';
-import { KIND_STYLES, kindFor, labelFor } from '../lib/attendance-status';
+import { KIND_STYLES, isAwayAtLunch, kindFor, labelForRecord } from '../lib/attendance-status';
 import { holidayName } from '../lib/holidays';
 import type { AttendanceRecord } from '../lib/attendance';
 import type { LunchPlan } from '../lib/lunch-plans';
 import type { Lunch } from '../lib/lunches';
+import { ANNIV_STYLES, type AnniversaryOccurrence } from '../lib/anniversaries';
 
 type Props = {
   date: Date;
   recordsByEmpNo: Record<string, AttendanceRecord | undefined>;
   plans: LunchPlan[];
-  lunches: Lunch[]; // 그 날짜의 먹기록 (참여자별 쪼물런치 여부 판단용)
+  lunches: Lunch[]; // 그 날짜의 먹기록 (점심: 참여자별 쪼물런치 판단, 저녁: 쪼물디너 섹션)
+  anniversaries: AnniversaryOccurrence[]; // 그 날짜의 기념일
   isDosirak: boolean; // 쪼물런치도 약속도 없는 날 = 도시락 날 (상세에서만 표시)
   myEmpNo: string; // 없으면(게스트 등) 약속 등록 UI 숨김
   onSavePlanFor: (empNo: string, note: string) => Promise<void>;
@@ -26,13 +28,16 @@ type Props = {
 
 // 그 사람의 그날 점심: 개인 약속 > 쪼물런치 참여 > 도시락(기본) 순으로 판단.
 // 쪼물런치 참여자는 라벨 생략 (위 섹션 배너로 충분) — 도시락 ↔ 약속만 클릭 토글.
+// 연차·오전 반차 등으로 점심시간에 회사에 없으면 라벨 자체를 표시하지 않음.
 function lunchChipFor(
   empNo: string,
   plans: LunchPlan[],
   lunches: Lunch[],
   isHoliday: boolean,
   isExtra: boolean,
+  awayAtLunch: boolean,
 ): { kind: 'plan' | 'dosirak'; text: string; cls: string; title: string } | null {
+  if (awayAtLunch) return null;
   const plan = plans.find((p) => p.empNo === empNo);
   if (plan) {
     return {
@@ -63,6 +68,7 @@ export default function DatePanel({
   recordsByEmpNo,
   plans,
   lunches,
+  anniversaries,
   isDosirak,
   myEmpNo,
   onSavePlanFor,
@@ -83,7 +89,7 @@ export default function DatePanel({
     try {
       const plan = plans.find((p) => p.empNo === empNo);
       if (plan) {
-        await onDeletePlanFor(empNo); // 약속 → 도시락
+        await onDeletePlanFor(empNo); // 약속 → 도시락 (고정 약속이면 그날만 쉬어감 처리)
       } else {
         await onSavePlanFor(empNo, ''); // 도시락 → 약속 (메모는 위 섹션에서 수정)
       }
@@ -126,6 +132,23 @@ export default function DatePanel({
         </header>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+          {/* 순서: 기념일 → 점심 → 멤버별 근태 → 쪼물디너 */}
+          {anniversaries.length > 0 ? (
+            <section className="rounded-lg border border-pink-100 bg-pink-50/40 p-3">
+              <h3 className="text-[11px] font-semibold text-pink-600 mb-1.5">🎉 이날의 기념일</h3>
+              <ul className="flex flex-wrap gap-1.5">
+                {anniversaries.map((a) => (
+                  <li
+                    key={a.key}
+                    className={`text-[11px] px-2 py-0.5 rounded-full border ${ANNIV_STYLES[a.kind]}`}
+                  >
+                    {a.emoji} {a.text}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <LunchPlanSection
             plans={plans}
             dayLunch={lunches.find((l) => l.meal === 'lunch') ?? null}
@@ -146,12 +169,19 @@ export default function DatePanel({
             const profile = getProfileByEmpNo(empNo);
             const name = resolveName(empNo);
             const kind = record ? kindFor(record.attendanceStatus) : 'other';
-            const label = record ? labelFor(record.attendanceStatus) : '기록 없음';
+            const label = record ? labelForRecord(record) : '기록 없음';
             const statusMessage = getStatus(empNo, dateStr);
             const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
               (e) => e.id === empNo,
             );
-            const lunchChip = lunchChipFor(empNo, plans, lunches, !!holidayName(dateStr), isExtra);
+            const lunchChip = lunchChipFor(
+              empNo,
+              plans,
+              lunches,
+              !!holidayName(dateStr),
+              isExtra,
+              isAwayAtLunch(record),
+            );
 
             return (
               <div
@@ -211,6 +241,34 @@ export default function DatePanel({
               </div>
             );
           })}
+
+          {lunches.some((l) => l.meal === 'dinner') ? (
+            <section className="rounded-lg border border-accent/20 bg-accent-soft/40 p-3">
+              <h3 className="text-[11px] font-semibold text-accent mb-1.5">🌙 쪼물디너</h3>
+              <ul className="space-y-1">
+                {lunches
+                  .filter((l) => l.meal === 'dinner')
+                  .map((l) => (
+                    <li key={l.id} className="text-xs text-ink-700">
+                      <b>{l.restaurant}</b>
+                      {l.delivery ? <span className="text-ink-400"> · 배달</span> : null}
+                      {/* 메뉴는 '-' 구분자마다 줄바꿈 — 각 줄은 '- '로 시작 (원문에 -가 있어도 중복 안 붙음) */}
+                      {l.menu
+                        ? l.menu
+                            .split('-')
+                            .map((part) => part.trim())
+                            .filter(Boolean)
+                            .map((part, i) => (
+                              <p key={i} className="text-ink-500 mt-0.5">
+                                - {part}
+                              </p>
+                            ))
+                        : null}
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       </aside>
     </>
@@ -292,6 +350,11 @@ function LunchPlanSection({
               <span className="text-ink-500 min-w-0 truncate">
                 {p.note ? p.note : '따로 약속 있어요'}
               </span>
+              {p.fixed ? (
+                <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-teal-600 border-teal-200">
+                  매주 고정
+                </span>
+              ) : null}
               {myEmpNo && p.empNo === myEmpNo ? (
                 <span className="ml-auto inline-flex items-center gap-0.5 shrink-0">
                   <button
@@ -363,7 +426,7 @@ function LunchPlanSection({
       ) : !dayLunch && myEmpNo ? (
         // 쪼물런치 날엔 토글이 없으므로 안내도 숨김
         <p className="text-[10px] text-ink-400">
-          💡 내 점심 라벨을 누르면 🍱 도시락 → 🍽️ 약속으로 바뀌어요
+          💡 내 점심 라벨을 누르면 🍱 도시락 ↔ 🍽️ 약속으로 바뀌어요
         </p>
       ) : null}
 

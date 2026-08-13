@@ -22,7 +22,7 @@ import {
 } from '../lib/attendance';
 import {
   occurrencesOnDate,
-  type AnniversaryKind,
+  ANNIV_STYLES,
   type AnniversaryOccurrence,
 } from '../lib/anniversaries';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
@@ -31,7 +31,9 @@ import {
   deleteLunchPlan,
   ensureLunchPlansSchema,
   listLunchPlans,
+  skipRecurringLunchPlan,
   upsertLunchPlan,
+  RECURRING_LUNCH_PLANS,
   type LunchPlan,
 } from '../lib/lunch-plans';
 import { holidayName } from '../lib/holidays';
@@ -39,8 +41,9 @@ import {
   DOT_STYLES,
   KIND_STYLES,
   LEGEND_ITEMS,
+  isAwayAtLunch,
   kindFor,
-  labelFor,
+  labelForRecord,
 } from '../lib/attendance-status';
 import { EXTRA_PARTICIPANTS, MEMBER_EMPNOS, type MemberEmpNo } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,14 +54,6 @@ import MemberProfileModal from '../components/MemberProfileModal';
 import DatePanel from '../components/DatePanel';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금'];
-
-// 기념일 종류별 배지 색
-const ANNIV_STYLES: Record<AnniversaryKind, string> = {
-  birthday: 'bg-pink-50 text-pink-600 border-pink-100',
-  hire: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  wedding: 'bg-rose-50 text-rose-600 border-rose-100',
-  custom: 'bg-violet-50 text-violet-600 border-violet-100',
-};
 
 export default function CalendarPage() {
   const { session, logout } = useAuth();
@@ -147,13 +142,6 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 날짜별 점심 약속
-  const plansByDate = useMemo(() => {
-    const map: Record<string, LunchPlan[]> = {};
-    for (const p of lunchPlans) (map[p.date] ??= []).push(p);
-    return map;
-  }, [lunchPlans]);
-
   // 각 먹기록이 캘린더에 얹힐 날짜 (wishlist는 plannedDate, done은 date)
   const lunchesByDate = useMemo(() => {
     const map: Record<string, Lunch[]> = {};
@@ -193,10 +181,39 @@ export default function CalendarPage() {
     [monthStart, monthEnd],
   );
 
+  // 날짜별 점심 약속: DB에 등록된 약속 + 매주 반복되는 고정 약속(합성).
+  // 고정 약속은 공휴일이거나 휴가 등으로 점심시간에 근무가 아니면 빼고,
+  // 같은 날 본인이 직접 등록한 약속이 있으면 그쪽을 우선한다.
+  // skipped 행은 "그날만 고정 약속 쉬어감" 표시 — 약속으로 렌더링하지 않고 합성만 막는다.
+  const plansByDate = useMemo(() => {
+    const map: Record<string, LunchPlan[]> = {};
+    const skipKeys = new Set<string>();
+    for (const p of lunchPlans) {
+      if (p.skipped) {
+        skipKeys.add(`${p.empNo}|${p.date}`);
+        continue;
+      }
+      (map[p.date] ??= []).push(p);
+    }
+    for (const day of gridDays) {
+      const key = format(day, 'yyyy-MM-dd');
+      if (holidayName(key)) continue;
+      for (const r of RECURRING_LUNCH_PLANS) {
+        if (day.getDay() !== r.weekday) continue;
+        if (skipKeys.has(`${r.empNo}|${key}`)) continue;
+        if (isAwayAtLunch(byMember[r.empNo as MemberEmpNo]?.[key])) continue;
+        if ((map[key] ?? []).some((p) => p.empNo === r.empNo)) continue;
+        (map[key] ??= []).push({ empNo: r.empNo, date: key, note: r.note, updatedAt: '', fixed: true });
+      }
+    }
+    return map;
+  }, [lunchPlans, gridDays, byMember]);
+
   // 이번 달 도시락 리포트: 사람별 집계.
   // 판정은 상세 라벨과 동일한 우선순위 — 약속 > 쪼물런치 참여 > 도시락.
   // 이미 잡힌 쪼물런치/약속은 미래여도 포함, 도시락만 "오늘까지 지난 평일" 기준
-  // (미래의 도시락은 아직 알 수 없으니까). 휴가·반차는 고려하지 않는 재미용 통계.
+  // (미래의 도시락은 아직 알 수 없으니까).
+  // 점심시간에 회사에 없는 날(연차·안식휴가·오전 반차)은 도시락으로 안 침 — isAwayAtLunch 참고.
   const dosirakStats = useMemo(() => {
     const todayKey = format(new Date(), 'yyyy-MM-dd');
     let counted = 0; // 도시락 판정 대상이 된 지나간 평일 수
@@ -218,13 +235,13 @@ export default function CalendarPage() {
         );
         if (hasPlan) per[emp].plan += 1;
         else if (inZzomulLunch) per[emp].zzomul += 1;
-        else if (isPast) per[emp].dosirak += 1;
+        else if (isPast && !isAwayAtLunch(byMember[emp]?.[key])) per[emp].dosirak += 1;
       }
     }
     const hasAny =
       counted > 0 || Object.values(per).some((s) => s.plan + s.zzomul > 0);
     return { counted, per, hasAny };
-  }, [monthDays, lunchesByDate, plansByDate]);
+  }, [monthDays, lunchesByDate, plansByDate, byMember]);
 
   // 날짜별 기념일 배지 (그리드 범위 전체 계산)
   const annivByDate = useMemo(() => {
@@ -299,8 +316,12 @@ export default function CalendarPage() {
                 return (
                   <div
                     key={dateKey}
-                    className={`relative min-h-[110px] border-t border-l border-ink-100 first:border-l-0 p-2 flex flex-col gap-1.5 ${
-                      inMonth ? 'bg-white' : 'bg-ink-50/40'
+                    onClick={() => inMonth && setSelectedDate(day)}
+                    className={`relative min-h-[110px] border-t border-l border-ink-100 first:border-l-0 p-2 flex flex-col gap-1.5 transition-colors ${
+                      inMonth
+                        ? // 멤버 행(.cell-item) 위에서만 제외, 나머지(빈 공간·날짜 숫자·뱃지)는 하이라이트
+                          'bg-white cursor-pointer [&:hover:not(:has(.cell-item:hover))]:bg-pretzel/20'
+                        : 'bg-ink-50/40'
                     } ${isToday ? 'ring-2 ring-inset ring-pretzel' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-1">
@@ -308,7 +329,7 @@ export default function CalendarPage() {
                         type="button"
                         disabled={!inMonth}
                         onClick={() => inMonth && setSelectedDate(day)}
-                        className={`text-xs font-medium rounded px-1 -mx-1 hover:bg-ink-50 disabled:cursor-default disabled:hover:bg-transparent ${
+                        className={`text-xs font-medium rounded px-1 -mx-1 disabled:cursor-default ${
                           !inMonth
                             ? holiday
                               ? 'text-red-300'
@@ -376,7 +397,7 @@ export default function CalendarPage() {
                         ].map((empNo) => {
                           const record = (byMember as Record<string, Record<string, AttendanceRecord | undefined> | undefined>)[empNo]?.[dateKey];
                           const kind = record ? kindFor(record.attendanceStatus) : 'other';
-                          const label = record ? labelFor(record.attendanceStatus) : '';
+                          const label = record ? labelForRecord(record) : '';
                           const name = resolveName(empNo);
                           const profile = getProfileByEmpNo(empNo);
                           const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
@@ -390,8 +411,12 @@ export default function CalendarPage() {
                           return (
                             <li
                               key={empNo}
-                              onClick={() => setSelected({ empNo, date: day, record: record ?? null })}
-                              className={`flex items-center gap-1.5 text-[11px] leading-tight pl-1 pr-1.5 py-0.5 rounded border cursor-pointer hover:brightness-95 ${
+                              onClick={(e) => {
+                                // 셀 클릭(날짜 상세 열기)으로 전파되면 모달이 겹치므로 차단
+                                e.stopPropagation();
+                                setSelected({ empNo, date: day, record: record ?? null });
+                              }}
+                              className={`cell-item flex items-center gap-1.5 text-[11px] leading-tight pl-1 pr-1.5 py-0.5 rounded border cursor-pointer hover:brightness-95 ${
                                 isExtra
                                   ? 'bg-violet-50 text-violet-700 border-violet-100'
                                   : record
@@ -436,7 +461,8 @@ export default function CalendarPage() {
               return (
                 <article
                   key={dateKey}
-                  className={`rounded-2xl border bg-white p-3 shadow-card ${
+                  onClick={() => setSelectedDate(day)}
+                  className={`rounded-2xl border bg-white p-3 shadow-card cursor-pointer transition-colors active:bg-pretzel/20 ${
                     isToday ? 'border-pretzel border-2' : 'border-ink-100'
                   }`}
                 >
@@ -494,7 +520,7 @@ export default function CalendarPage() {
                     ].map((empNo) => {
                       const record = (byMember as Record<string, Record<string, AttendanceRecord | undefined> | undefined>)[empNo]?.[dateKey];
                       const kind = record ? kindFor(record.attendanceStatus) : 'other';
-                      const label = record ? labelFor(record.attendanceStatus) : '';
+                      const label = record ? labelForRecord(record) : '';
                       const name = resolveName(empNo);
                       const profile = getProfileByEmpNo(empNo);
                       const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
@@ -508,7 +534,11 @@ export default function CalendarPage() {
                       return (
                         <li
                           key={empNo}
-                          onClick={() => setSelected({ empNo, date: day, record: record ?? null })}
+                          onClick={(e) => {
+                            // 카드 클릭(날짜 상세 열기)으로 전파되면 모달이 겹치므로 차단
+                            e.stopPropagation();
+                            setSelected({ empNo, date: day, record: record ?? null });
+                          }}
                           className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-md border cursor-pointer active:brightness-95 ${
                             isExtra
                               ? 'bg-violet-50 text-violet-700 border-violet-100'
@@ -585,8 +615,9 @@ export default function CalendarPage() {
             })}
           </ul>
           <p className="mt-2 text-[10px] text-ink-400">
-            🍜·🍽️는 예정 포함, 🍱는 오늘까지 지난 평일({dosirakStats.counted}일) 기준 · 도시락
-            하루 = 외식 한 끼 8,000원 절약으로 계산했어요
+            🍜·🍽️는 예정 포함, 🍱는 오늘까지 지난 평일({dosirakStats.counted}일) 기준이고
+            연차·오전 반차로 점심에 없던 날은 빼요 · 도시락 하루 = 외식 한 끼 8,000원 절약으로
+            계산했어요
           </p>
         </section>
       ) : null}
@@ -611,14 +642,31 @@ export default function CalendarPage() {
           )}
           plans={plansByDate[format(selectedDate, 'yyyy-MM-dd')] ?? []}
           lunches={lunchesByDate[format(selectedDate, 'yyyy-MM-dd')] ?? []}
+          anniversaries={annivByDate[format(selectedDate, 'yyyy-MM-dd')] ?? []}
           isDosirak={isDosirakDay(format(selectedDate, 'yyyy-MM-dd'))}
           myEmpNo={myPid}
           onSavePlanFor={async (empNo, note) => {
-            await upsertLunchPlan(empNo, format(selectedDate, 'yyyy-MM-dd'), note);
+            const key = format(selectedDate, 'yyyy-MM-dd');
+            // 고정 약속을 쉬어가던 날(skipped 행)을 빈 메모로 다시 켜면 행을 지워 고정 약속 복구
+            const wasSkipped = lunchPlans.some(
+              (p) => p.empNo === empNo && p.date === key && p.skipped,
+            );
+            const isRecurringDay = RECURRING_LUNCH_PLANS.some(
+              (r) => r.empNo === empNo && selectedDate.getDay() === r.weekday,
+            );
+            if (wasSkipped && isRecurringDay && !note.trim()) {
+              await deleteLunchPlan(empNo, key);
+            } else {
+              await upsertLunchPlan(empNo, key, note);
+            }
             await refreshLunchPlans();
           }}
           onDeletePlanFor={async (empNo) => {
-            await deleteLunchPlan(empNo, format(selectedDate, 'yyyy-MM-dd'));
+            const key = format(selectedDate, 'yyyy-MM-dd');
+            // 고정 약속(합성)은 지울 DB 행이 없으니 "그날만 쉬어감" 표시를 남긴다
+            const plan = (plansByDate[key] ?? []).find((p) => p.empNo === empNo);
+            if (plan?.fixed) await skipRecurringLunchPlan(empNo, key);
+            else await deleteLunchPlan(empNo, key);
             await refreshLunchPlans();
           }}
           onClose={() => setSelectedDate(null)}

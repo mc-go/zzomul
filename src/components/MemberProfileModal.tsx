@@ -5,7 +5,7 @@ import { ko } from 'date-fns/locale';
 import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
-import { kindFor, labelFor, KIND_STYLES } from '../lib/attendance-status';
+import { kindFor, labelForRecord, KIND_STYLES } from '../lib/attendance-status';
 import { isLateArrival, type AttendanceRecord } from '../lib/attendance';
 
 type Props = {
@@ -22,7 +22,7 @@ export default function MemberProfileModal({ empNo, date, record, onClose }: Pro
   const profile = getProfileByEmpNo(empNo);
   const name = resolveName(empNo);
   const kind = record ? kindFor(record.attendanceStatus) : 'other';
-  const label = record ? labelFor(record.attendanceStatus) : '기록 없음';
+  const label = record ? labelForRecord(record) : '기록 없음';
   const dateStr = date
     ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     : '';

@@ -219,6 +219,11 @@ export default function DevInfo() {
                   평일, 자동)
                 </p>
                 <p className="mt-1 text-[11px] text-ink-400">
+                  매주 고정 약속(<Code>RECURRING_LUNCH_PLANS</Code>)은 DB 없이 합성 — 공휴일·휴가
+                  땐 제외, 토글로 끄면 skipped 행으로 그날만 쉬어가요. 도시락 리포트도 연차·오전
+                  반차 날은 도시락에서 빼요
+                </p>
+                <p className="mt-1 text-[11px] text-ink-400">
                   운세 탭은 DB 저장 없음 — 생일+날짜 시드로 결정적 생성 (
                   <Code>src/lib/fortune.ts</Code>)
                 </p>

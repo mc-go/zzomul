@@ -205,6 +205,14 @@ export type AnniversaryOccurrence = {
   text: string;
 };
 
+// 기념일 종류별 배지 색 (캘린더 셀 + 날짜 상세 공용)
+export const ANNIV_STYLES: Record<AnniversaryKind, string> = {
+  birthday: 'bg-pink-50 text-pink-600 border-pink-100',
+  hire: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  wedding: 'bg-rose-50 text-rose-600 border-rose-100',
+  custom: 'bg-violet-50 text-violet-600 border-violet-100',
+};
+
 // 특정 날짜에 해당하는 기념일들 (캘린더 셀 배지용)
 export function occurrencesOnDate(
   items: Anniversary[],

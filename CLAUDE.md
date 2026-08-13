@@ -39,9 +39,11 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
   - `reports` — 오늘의 보고 (date + author_id UNIQUE, 하루 1건 upsert)
   - `report_comments` — 보고 댓글 (report_id + author_id UNIQUE, 1인 1댓글 upsert, 본인 보고엔 불가)
   - `anniversaries` — 기념일 (kind: birthday/hire/wedding/custom, repeat: yearly/every100days/once, remind_days JSON)
-  - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note) — 캘린더에 🍽️ 뱃지, DatePanel에서 본인 것만 등록/삭제
+  - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note, skipped) — 캘린더에 🍽️ 뱃지, DatePanel에서 본인 것만 등록/삭제. skipped=1은 고정 약속을 그날만 쉬어가는 표시
+- **매주 고정 약속**: `RECURRING_LUNCH_PLANS`(src/lib/lunch-plans.ts) — DB 저장 없이 캘린더에서 합성(`fixed: true`). 공휴일이거나 휴가 등으로 점심시간에 근무가 아니면 제외, 같은 날 직접 등록한 약속이 있으면 그쪽 우선. 예외 토글 가능: 끄면 `lunch_plans.skipped=1` 행으로 "그날만 쉬어감" 저장, 다시 켜면 행 삭제로 복구. 현재: 고민채(2023124) 금요일 "앱개발 팀 회식"
 - 캘린더 점심 구분 3종: 🍜 쪼물런치(배달이면 🛵) · 🍽️ 개인 약속 · 🍱 도시락 — 도시락은 별도 데이터 없이 "쪼물런치(점심)도 개인 약속도 없는 평일(공휴일 제외)"에 자동 표시 (도시락/약속 라벨은 날짜 상세에서만, 캘린더 그리드엔 안 보임)
-- 캘린더 하단 "도시락 리포트": 보는 달의 **사람별** 도시락/쪼물런치/약속 일수 + 절약액(1일 8,000원) — 쪼물런치·약속은 예정(미래)도 포함, 도시락만 오늘까지 지난 평일 기준. 계산만, 저장 없음
+- 캘린더 하단 "도시락 리포트": 보는 달의 **사람별** 도시락/쪼물런치/약속 일수 + 절약액(1일 8,000원) — 쪼물런치·약속은 예정(미래)도 포함, 도시락만 오늘까지 지난 평일 기준. 연차(휴가)·안식휴가·오전 반차로 점심에 없던 날은 도시락에서 제외(`isAwayAtLunch` — 반차는 출근/근무예정 시작이 정오 이후면 오전 반차로 판정). 계산만, 저장 없음
+- 캘린더 날짜 상세(DatePanel)는 날짜 숫자뿐 아니라 셀/카드의 빈 공간 클릭으로도 열림 (멤버 행 클릭은 stopPropagation으로 프로필 모달만)
 
 ## 도메인 메모
 
