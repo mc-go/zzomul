@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 쪼물랭 파비콘: 프레첼 이모지.
+       text-anchor + dominant-baseline로 정중앙 배치, 크기를 줄여 사방 잘림 방지 -->
+  <text x="50" y="54" font-size="78" text-anchor="middle" dominant-baseline="central">🥨</text>
+</svg>
