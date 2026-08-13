@@ -1,25 +1,96 @@
+import { useState, type FormEvent } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuX } from 'react-icons/lu';
+import { LuX, LuPencil, LuTrash2 } from 'react-icons/lu';
 import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { MEMBER_EMPNOS, EXTRA_PARTICIPANTS } from '../lib/members';
 import { KIND_STYLES, kindFor, labelFor } from '../lib/attendance-status';
+import { holidayName } from '../lib/holidays';
 import type { AttendanceRecord } from '../lib/attendance';
+import type { LunchPlan } from '../lib/lunch-plans';
+import type { Lunch } from '../lib/lunches';
 
 type Props = {
   date: Date;
   recordsByEmpNo: Record<string, AttendanceRecord | undefined>;
+  plans: LunchPlan[];
+  lunches: Lunch[]; // 그 날짜의 먹기록 (참여자별 쪼물런치 여부 판단용)
+  isDosirak: boolean; // 쪼물런치도 약속도 없는 날 = 도시락 날 (상세에서만 표시)
+  myEmpNo: string; // 없으면(게스트 등) 약속 등록 UI 숨김
+  onSavePlanFor: (empNo: string, note: string) => Promise<void>;
+  onDeletePlanFor: (empNo: string) => Promise<void>;
   onClose: () => void;
 };
 
-export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
+// 그 사람의 그날 점심: 개인 약속 > 쪼물런치 참여 > 도시락(기본) 순으로 판단.
+// 쪼물런치 참여자는 라벨 생략 (위 섹션 배너로 충분) — 도시락 ↔ 약속만 클릭 토글.
+function lunchChipFor(
+  empNo: string,
+  plans: LunchPlan[],
+  lunches: Lunch[],
+  isHoliday: boolean,
+  isExtra: boolean,
+): { kind: 'plan' | 'dosirak'; text: string; cls: string; title: string } | null {
+  const plan = plans.find((p) => p.empNo === empNo);
+  if (plan) {
+    return {
+      kind: 'plan',
+      text: '🍽️ 약속',
+      cls: 'bg-teal-50 text-teal-700 border-teal-100',
+      title: plan.note ? `점심 약속 · ${plan.note}` : '점심 약속',
+    };
+  }
+  const inZzomulLunch = lunches.some(
+    (l) =>
+      l.meal === 'lunch' &&
+      (l.participants.length === 0 || (l.participants as readonly string[]).includes(empNo)),
+  );
+  if (inZzomulLunch) return null;
+  // 게스트/퇴사자와 공휴일엔 도시락 표시 안 함
+  if (isExtra || isHoliday) return null;
+  return {
+    kind: 'dosirak',
+    text: '🍱 도시락',
+    cls: 'bg-lime-50 text-lime-700 border-lime-100',
+    title: '쪼물런치도 약속도 없는 날 — 도시락!',
+  };
+}
+
+export default function DatePanel({
+  date,
+  recordsByEmpNo,
+  plans,
+  lunches,
+  isDosirak,
+  myEmpNo,
+  onSavePlanFor,
+  onDeletePlanFor,
+  onClose,
+}: Props) {
   const { getProfileByEmpNo, getStatus } = useProfiles();
   const { resolveName } = useAppData();
+  const [chipBusy, setChipBusy] = useState<string | null>(null);
 
   const dateLabel = format(date, 'yyyy년 M월 d일 (EEE)', { locale: ko });
   const dateStr = format(date, 'yyyy-MM-dd');
+
+  // 라벨 클릭 시 토글: 도시락 ↔ 약속 (쪼물런치는 먹기록 기준이라 여기서 안 바뀜)
+  async function toggleLunchType(empNo: string) {
+    if (chipBusy) return;
+    setChipBusy(empNo);
+    try {
+      const plan = plans.find((p) => p.empNo === empNo);
+      if (plan) {
+        await onDeletePlanFor(empNo); // 약속 → 도시락
+      } else {
+        await onSavePlanFor(empNo, ''); // 도시락 → 약속 (메모는 위 섹션에서 수정)
+      }
+    } finally {
+      setChipBusy(null);
+    }
+  }
 
   return (
     <>
@@ -55,6 +126,17 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
         </header>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+          <LunchPlanSection
+            plans={plans}
+            dayLunch={lunches.find((l) => l.meal === 'lunch') ?? null}
+            isDosirak={isDosirak}
+            myEmpNo={myEmpNo}
+            resolveName={resolveName}
+            getProfileByEmpNo={getProfileByEmpNo}
+            onSave={(note) => onSavePlanFor(myEmpNo, note)}
+            onDelete={() => onDeletePlanFor(myEmpNo)}
+          />
+
           {[
             ...MEMBER_EMPNOS,
             // 게스트/퇴사자는 그 날짜에 상태 메시지 있을 때만 노출
@@ -69,6 +151,7 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
             const isExtra = (EXTRA_PARTICIPANTS as readonly { id: string }[]).some(
               (e) => e.id === empNo,
             );
+            const lunchChip = lunchChipFor(empNo, plans, lunches, !!holidayName(dateStr), isExtra);
 
             return (
               <div
@@ -90,6 +173,31 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
                         {label}
                       </span>
                     )}
+                    {lunchChip ? (
+                      isExtra || empNo !== myEmpNo ? (
+                        // 남의 라벨은 표시만 — 토글은 내 것만 가능
+                        <span
+                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${lunchChip.cls}`}
+                          title={lunchChip.title}
+                        >
+                          {lunchChip.text}
+                        </span>
+                      ) : (
+                        // 클릭하면 도시락 ↔ 약속 토글
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void toggleLunchType(empNo);
+                          }}
+                          disabled={chipBusy === empNo}
+                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 ${lunchChip.cls}`}
+                          title={`${lunchChip.title} · 클릭하면 ${lunchChip.kind === 'plan' ? '도시락으로' : '약속으로'} 바뀌어요`}
+                        >
+                          {chipBusy === empNo ? '...' : lunchChip.text}
+                        </button>
+                      )
+                    ) : null}
                   </div>
                   {record?.scheduleTime ? (
                     <p className="text-[11px] text-ink-400 mt-0.5">{record.scheduleTime}</p>
@@ -106,5 +214,160 @@ export default function DatePanel({ date, recordsByEmpNo, onClose }: Props) {
         </div>
       </aside>
     </>
+  );
+}
+
+// 🍱 이날의 점심 약속: 각자 자기 약속만 등록/삭제할 수 있고, 다른 사람 것도 함께 보임.
+// 쪼물런치가 아닌 개인 외식 약속을 서로 미리 알 수 있게 하는 용도.
+function LunchPlanSection({
+  plans,
+  dayLunch,
+  isDosirak,
+  myEmpNo,
+  resolveName,
+  getProfileByEmpNo,
+  onSave,
+  onDelete,
+}: {
+  plans: LunchPlan[];
+  dayLunch: Lunch | null; // 그날의 쪼물런치 기록 (있으면 약속 없어도 쪼물런치 날로 안내)
+  isDosirak: boolean;
+  myEmpNo: string;
+  resolveName: (id: string) => string;
+  getProfileByEmpNo: (id: string) => import('../lib/profiles').Profile | null;
+  onSave: (note: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const myPlan = myEmpNo ? plans.find((p) => p.empNo === myEmpNo) ?? null : null;
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState(myPlan?.note ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onSave(note);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '저장 실패');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (busy) return;
+    if (!confirm('이날 점심 약속 표시를 지울까요?')) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onDelete();
+      setEditing(false);
+      setNote('');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '삭제 실패');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-teal-100 bg-teal-50/40 p-3">
+      <h3 className="text-[11px] font-semibold text-teal-700 mb-2">🍽️ 이날의 점심 약속</h3>
+
+      {plans.length > 0 ? (
+        <ul className="space-y-1.5 mb-2">
+          {plans.map((p) => (
+            <li key={p.empNo} className="flex items-center gap-2 text-xs text-ink-700">
+              <Avatar
+                profile={getProfileByEmpNo(p.empNo)}
+                size="xs"
+                fallbackText={resolveName(p.empNo)}
+              />
+              <span className="font-medium">{resolveName(p.empNo)}</span>
+              <span className="text-ink-500 min-w-0 truncate">
+                {p.note ? p.note : '따로 약속 있어요'}
+              </span>
+              {myEmpNo && p.empNo === myEmpNo ? (
+                <span className="ml-auto inline-flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNote(p.note);
+                      setEditing(true);
+                    }}
+                    className="text-ink-300 hover:text-ink-900 p-1 rounded hover:bg-white"
+                    aria-label="약속 수정"
+                    title="수정"
+                  >
+                    <LuPencil className="text-xs" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={remove}
+                    disabled={busy}
+                    className="text-ink-300 hover:text-red-600 p-1 rounded hover:bg-white"
+                    aria-label="약속 삭제"
+                    title="삭제"
+                  >
+                    <LuTrash2 className="text-xs" />
+                  </button>
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : dayLunch ? (
+        <p className="text-[11px] text-amber-700 mb-2 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1.5">
+          {dayLunch.delivery ? '🛵' : '🍜'} 드디어 쪼물런치! <b>{dayLunch.restaurant}</b> 즐겨
+          봐요😋
+        </p>
+      ) : isDosirak ? (
+        <p className="text-[11px] text-lime-700 mb-2 rounded-lg bg-lime-50 border border-lime-100 px-2.5 py-1.5">
+          🍱 쪼물런치도 약속도 없는 날 — 도시락 먹는 날이에요!
+        </p>
+      ) : (
+        <p className="text-[11px] text-ink-400 mb-2">아직 등록된 약속이 없어요.</p>
+      )}
+
+      {/* 약속 등록은 아래 이름 옆 라벨 클릭으로 통일 — 여기선 내 약속 메모 수정만 */}
+      {myEmpNo && editing ? (
+        <form onSubmit={submit} className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="누구랑? 어디서? (선택)"
+            className="flex-1 min-w-0 h-8 px-2.5 rounded-full border border-teal-200 text-[11px] placeholder-ink-300 bg-white"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="h-8 px-3 shrink-0 rounded-full bg-teal-600 text-white text-[11px] font-medium hover:bg-teal-700 disabled:opacity-60"
+          >
+            {busy ? '저장 중...' : '저장'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="h-8 px-2 shrink-0 rounded-full text-[11px] text-ink-400 hover:text-ink-900"
+          >
+            취소
+          </button>
+        </form>
+      ) : !dayLunch && myEmpNo ? (
+        // 쪼물런치 날엔 토글이 없으므로 안내도 숨김
+        <p className="text-[10px] text-ink-400">
+          💡 내 점심 라벨을 누르면 🍱 도시락 → 🍽️ 약속으로 바뀌어요
+        </p>
+      ) : null}
+
+      {err ? <p className="mt-1.5 text-[11px] text-red-600">{err}</p> : null}
+    </section>
   );
 }

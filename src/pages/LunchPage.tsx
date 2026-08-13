@@ -124,8 +124,29 @@ export default function LunchPage() {
     await refresh();
   }
 
-  async function handlePromote(input: Parameters<typeof promoteLunch>[0]) {
-    await promoteLunch(input);
+  // 다녀왔어요: 기록을 done으로 바꾸고, 별점/한줄평은 "누른 사람 본인"의 평으로 저장.
+  // (예전엔 lunches.comment에 저장했다가 이관 로직이 다른 사람 평으로 옮기는 버그가 있었음)
+  async function handlePromote(input: {
+    id: number;
+    date: string;
+    rating: number;
+    comment: string;
+    participants: ParticipantId[];
+  }) {
+    await promoteLunch({
+      id: input.id,
+      date: input.date,
+      rating: input.rating,
+      participants: input.participants,
+    });
+    if (isValidParticipantId(myPid)) {
+      await upsertReview({
+        lunchId: input.id,
+        reviewerId: myPid,
+        rating: input.rating,
+        comment: input.comment,
+      });
+    }
     setForm(null);
     await refresh();
   }
@@ -356,6 +377,7 @@ function WishlistSection({
                     >
                       {MEAL_LABEL[item.meal]}
                     </span>
+                    {item.delivery ? <DeliveryChip /> : null}
                     {item.plannedDate ? (
                       <span className="text-[11px] text-ink-500">
                         예정 · {format(new Date(item.plannedDate), 'M월 d일 (EEE)', { locale: ko })}
@@ -520,6 +542,7 @@ function DoneSection({
                       <span className="text-[11px] text-ink-400 font-medium">
                         {format(new Date(lunch.date), 'M월 d일 (EEE)', { locale: ko })}
                       </span>
+                      {lunch.delivery ? <DeliveryChip /> : null}
                       {/* 리뷰가 있으면 평균, 없으면 기존 단일 별점 */}
                       <StarRating value={avg ?? lunch.rating} size="sm" readOnly />
                       {avg != null ? (
@@ -739,6 +762,15 @@ function CreatorLine({
   );
 }
 
+// 배달 기록 표시 칩 (텍스트로 "(배달)" 적는 대신 체크로 구분)
+function DeliveryChip() {
+  return (
+    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-100">
+      🛵 배달
+    </span>
+  );
+}
+
 function RestaurantTitle({ name, link }: { name: string; link: string }) {
   if (link && /^https?:\/\//i.test(link)) {
     return (
@@ -788,6 +820,7 @@ function RecordForm({
     comment: string;
     link: string;
     plannedDate: string | null;
+    delivery: boolean;
     participants: ParticipantId[];
     createdBy: string;
   }) => Promise<void>;
@@ -801,6 +834,7 @@ function RecordForm({
     comment: string;
     link: string;
     plannedDate: string | null;
+    delivery: boolean;
     participants: ParticipantId[];
   }) => Promise<void>;
 }) {
@@ -819,6 +853,7 @@ function RecordForm({
   const [menu, setMenu] = useState(isEdit ? mode.lunch.menu : '');
   const [rating, setRating] = useState(isEdit ? mode.lunch.rating || 4 : 4);
   const [link, setLink] = useState(isEdit ? mode.lunch.link : '');
+  const [delivery, setDelivery] = useState(isEdit ? mode.lunch.delivery : false);
   const [participants, setParticipants] = useState<ParticipantId[]>(
     isEdit && mode.lunch.participants.length > 0
       ? [...mode.lunch.participants]
@@ -856,6 +891,7 @@ function RecordForm({
         comment: isEdit ? mode.lunch.comment : '',
         link: link.trim(),
         plannedDate: isWishlist ? plannedDate || null : null,
+        delivery,
         participants,
       };
       if (isEdit) {
@@ -896,6 +932,28 @@ function RecordForm({
                   }`}
                 >
                   {MEAL_LABEL[key]}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <Field label="어떻게 먹나요?">
+          <div className="grid grid-cols-2 gap-2">
+            {([false, true] as const).map((isDelivery) => {
+              const active = delivery === isDelivery;
+              return (
+                <button
+                  key={String(isDelivery)}
+                  type="button"
+                  onClick={() => setDelivery(isDelivery)}
+                  className={`h-10 px-2 rounded-md border text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-ink-900 text-white border-ink-900'
+                      : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  {isDelivery ? '🛵 배달로 먹어요' : '🍽️ 가서 먹어요'}
                 </button>
               );
             })}
@@ -1067,16 +1125,16 @@ function PromoteFormDialog({
           />
         </Field>
 
-        <Field label="별점">
+        <Field label="내 별점">
           <StarRating value={rating} onChange={setRating} size="lg" />
         </Field>
 
-        <Field label="한줄평">
+        <Field label="내 한줄평">
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             rows={3}
-            placeholder="어땠는지 짧게 남겨주세요."
+            placeholder="어땠는지 짧게 남겨주세요. 내 이름의 평으로 저장돼요 ✍️"
             className="w-full px-3 py-2 rounded-md border border-ink-200 text-sm placeholder-ink-300 resize-none"
           />
         </Field>

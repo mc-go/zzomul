@@ -10,6 +10,7 @@ import CalendarPage from './pages/CalendarPage';
 import LunchPage from './pages/LunchPage';
 import ReportPage from './pages/ReportPage';
 import MemoPage from './pages/MemoPage';
+import FortunePage from './pages/FortunePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, ready } = useAuth();
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/lunch" element={<LunchPage />} />
             <Route path="/report" element={<ReportPage />} />
             <Route path="/memo" element={<MemoPage />} />
+            <Route path="/fortune" element={<FortunePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/calendar" replace />} />
         </Routes>

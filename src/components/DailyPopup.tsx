@@ -12,6 +12,8 @@ import {
   type ReportComment,
 } from '../lib/reports';
 import { noticesForToday, type AnniversaryNotice } from '../lib/anniversaries';
+import { getFortune, type Fortune } from '../lib/fortune';
+import { ScoreStars } from '../pages/FortunePage';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
@@ -20,6 +22,7 @@ import Avatar from './Avatar';
 // 하루의 소식 팝업: 접속(새로고침) 시 1회,
 //  - 다른 사람이 쓴 오늘의 보고 (안 본 것만)
 //  - 기념일 알림 (당일은 무조건, 그 외엔 설정한 며칠 전)
+//  - 오늘의 내 운세 (생일 등록된 경우, 하루 1회)
 // 본 항목은 localStorage에 기록해서 다시 안 띄움.
 
 const SEEN_KEY = 'zzomul.daily.seen.v1';
@@ -140,6 +143,8 @@ export default function DailyPopup({ myId }: { myId: string }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [comments, setComments] = useState<Record<number, ReportComment[]>>({});
   const [notices, setNotices] = useState<AnniversaryNotice[]>([]);
+  const [fortune, setFortune] = useState<Fortune | null>(null);
+  const [fortuneKey, setFortuneKey] = useState('');
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -167,10 +172,18 @@ export default function DailyPopup({ myId }: { myId: string }) {
       const freshNotices = noticesForToday(anniversaries, new Date(), resolveName).filter(
         (n) => !seen[n.key],
       );
-      if (freshReports.length > 0 || freshNotices.length > 0) {
+      // 오늘의 내 운세: 생일이 등록돼 있으면 그 날 처음 진입할 때 1회만
+      const myBirthday = myId
+        ? anniversaries.find((a) => a.kind === 'birthday' && a.ownerId === myId)?.date ?? ''
+        : '';
+      const fKey = `fortune-${myId}-${today}`;
+      const freshFortune = myBirthday && !seen[fKey] ? getFortune(myId, myBirthday, today) : null;
+      if (freshReports.length > 0 || freshNotices.length > 0 || freshFortune) {
         setReports(freshReports);
         setComments(await listCommentsForReports(freshReports.map((r) => r.id)));
         setNotices(freshNotices);
+        setFortune(freshFortune);
+        setFortuneKey(freshFortune ? fKey : '');
         setOpen(true);
       }
     } catch {
@@ -185,7 +198,11 @@ export default function DailyPopup({ myId }: { myId: string }) {
   }
 
   function close() {
-    markSeen([...reports.map(reportKey), ...notices.map((n) => n.key)]);
+    markSeen([
+      ...reports.map(reportKey),
+      ...notices.map((n) => n.key),
+      ...(fortuneKey ? [fortuneKey] : []),
+    ]);
     setOpen(false);
   }
 
@@ -196,6 +213,7 @@ export default function DailyPopup({ myId }: { myId: string }) {
       reports={reports}
       notices={notices}
       comments={comments}
+      fortune={fortune}
       myId={myId}
       onAddComment={myId ? handleAddComment : undefined}
       onClose={close}
@@ -208,6 +226,7 @@ export function DailyPopupView({
   reports,
   notices,
   comments = {},
+  fortune = null,
   myId = '',
   onAddComment,
   onClose,
@@ -215,6 +234,7 @@ export function DailyPopupView({
   reports: Report[];
   notices: AnniversaryNotice[];
   comments?: Record<number, ReportComment[]>;
+  fortune?: Fortune | null;
   myId?: string;
   onAddComment?: (reportId: number, content: string) => Promise<void>;
   onClose: () => void;
@@ -266,6 +286,35 @@ export function DailyPopupView({
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {/* 오늘의 내 운세 (그 날 첫 진입 시 1회) */}
+          {fortune ? (
+            <div>
+              <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">🔮 오늘의 내 운세</h3>
+              <div className="rounded-2xl border border-violet-200 bg-gradient-to-b from-violet-50/80 to-white px-4 py-3">
+                <p className="text-center text-xs">
+                  <ScoreStars score={fortune.score} />
+                </p>
+                <p className="mt-1 text-center text-sm font-bold text-ink-900">
+                  {fortune.headline}
+                </p>
+                <p className="mt-1 text-[11px] text-ink-600 leading-relaxed text-center">
+                  {fortune.overall}
+                </p>
+                <div className="mt-2 space-y-1">
+                  <p className="text-[11px] text-ink-700 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
+                    ✅ {fortune.doToday}
+                  </p>
+                  <p className="text-[11px] text-ink-700 rounded-lg bg-rose-50 border border-rose-100 px-2.5 py-1.5">
+                    ⚠️ {fortune.avoidToday}
+                  </p>
+                </div>
+                <p className="mt-2 text-center text-[10px] text-ink-400">
+                  🍀 {fortune.luckyItem} · 🎨 {fortune.luckyColor.name} — 친구들 운세는 운세 탭에서!
+                </p>
+              </div>
+            </div>
           ) : null}
 
           {/* 다가오는 기념일 (D-n) */}

@@ -14,6 +14,7 @@ export type LunchInput = {
   comment: string;
   link: string;
   plannedDate: string | null;
+  delivery: boolean; // 배달로 먹는 기록 (매장 방문과 구분)
   participants: ParticipantId[];
   createdBy: string;
 };
@@ -29,16 +30,18 @@ export type Lunch = {
   comment: string;
   link: string;
   plannedDate: string | null;
+  delivery: boolean;
   participants: ParticipantId[];
   createdBy: string;
   createdAt: string;
 };
 
+// 한줄평은 여기서 받지 않음 — 작성자 본인의 평(lunch_reviews)으로 따로 저장해야 함.
+// (lunches.comment에 쓰면 예전 이관 로직처럼 작성자가 뒤바뀌는 사고가 남)
 export type PromoteInput = {
   id: number;
   date: string;
   rating: number;
-  comment: string;
   participants: ParticipantId[];
 };
 
@@ -67,6 +70,7 @@ export async function ensureSchema(): Promise<void> {
     `ALTER TABLE lunches ADD COLUMN status TEXT NOT NULL DEFAULT 'done'`,
     `ALTER TABLE lunches ADD COLUMN planned_date TEXT`,
     `ALTER TABLE lunches ADD COLUMN link TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE lunches ADD COLUMN is_delivery INTEGER NOT NULL DEFAULT 0`,
   ];
   for (const sql of migrations) {
     try {
@@ -93,7 +97,7 @@ export async function listLunches(): Promise<Lunch[]> {
   const db = getDb();
   const res = await db.execute(
     `SELECT id, date, meal, status, restaurant, menu, rating, comment,
-            link, planned_date, participants, created_by, created_at
+            link, planned_date, is_delivery, participants, created_by, created_at
      FROM lunches ORDER BY date DESC, id DESC`,
   );
   return res.rows.map((row) => ({
@@ -107,6 +111,7 @@ export async function listLunches(): Promise<Lunch[]> {
     comment: String(row.comment ?? ''),
     link: String(row.link ?? ''),
     plannedDate: row.planned_date ? String(row.planned_date) : null,
+    delivery: Number(row.is_delivery ?? 0) === 1,
     participants: parseParticipants(row.participants),
     createdBy: String(row.created_by ?? ''),
     createdAt: String(row.created_at ?? ''),
@@ -121,8 +126,8 @@ export async function createLunch(input: LunchInput): Promise<void> {
   await db.execute({
     sql: `INSERT INTO lunches
             (date, meal, status, restaurant, menu, rating, comment,
-             link, planned_date, participants, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             link, planned_date, is_delivery, participants, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       input.date,
       input.meal,
@@ -133,6 +138,7 @@ export async function createLunch(input: LunchInput): Promise<void> {
       input.comment,
       input.link,
       input.plannedDate ?? null,
+      input.delivery ? 1 : 0,
       JSON.stringify(participants),
       input.createdBy,
     ],
@@ -149,6 +155,7 @@ export type UpdateLunchInput = {
   comment: string;
   link: string;
   plannedDate: string | null;
+  delivery: boolean;
   participants: ParticipantId[];
 };
 
@@ -160,7 +167,7 @@ export async function updateLunch(input: UpdateLunchInput): Promise<void> {
   await db.execute({
     sql: `UPDATE lunches
           SET date = ?, meal = ?, restaurant = ?, menu = ?, rating = ?, comment = ?,
-              link = ?, planned_date = ?, participants = ?
+              link = ?, planned_date = ?, is_delivery = ?, participants = ?
           WHERE id = ?`,
     args: [
       input.date,
@@ -171,6 +178,7 @@ export async function updateLunch(input: UpdateLunchInput): Promise<void> {
       input.comment,
       input.link,
       input.plannedDate ?? null,
+      input.delivery ? 1 : 0,
       JSON.stringify(participants),
       input.id,
     ],
@@ -187,14 +195,12 @@ export async function promoteLunch(input: PromoteInput): Promise<void> {
           SET status = 'done',
               date = ?,
               rating = ?,
-              comment = ?,
               participants = ?,
               planned_date = NULL
           WHERE id = ?`,
     args: [
       input.date,
       Math.max(0, Math.min(5, Math.round(input.rating * 2) / 2)),
-      input.comment,
       JSON.stringify(participants),
       input.id,
     ],

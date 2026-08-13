@@ -8,7 +8,7 @@
 - **HashRouter** (react-router-dom) — GitHub Pages 서브패스 대응
 - DB: **Turso (libSQL)** — `@libsql/client/web`, 브라우저에서 직접 접속
 - 근태 API: 듀얼아이 (`atdapi.duallmaster.com`) — 로그인/근태/직원 목록
-- `src/pages/` 탭 페이지 (근태 `/calendar` · 먹기록 `/lunch` · 보고 `/report`)
+- `src/pages/` 탭 페이지 (근태 `/calendar` · 먹기록 `/lunch` · 보고 `/report` · 아무거나 `/memo` · 운세 `/fortune`)
 - `src/lib/` DB 접근 + 도메인 로직, `src/contexts/` 전역 상태(Auth/Profiles/AppData/Anniversaries)
 
 ## 명령어
@@ -34,18 +34,23 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
 - 컬럼 추가는 같은 함수에서 `ALTER TABLE ... ADD COLUMN`을 try/catch로 실행 (중복이면 무시)
 - 주요 테이블:
   - `profiles` — id(로그인 userId 기준) · emp_no · icon/color/photo · status_message
-  - `lunches` — 먹기록 (status: wishlist/done, meal: lunch/dinner, participants JSON)
+  - `lunches` — 먹기록 (status: wishlist/done, meal: lunch/dinner, is_delivery, participants JSON)
   - `lunch_reviews` — 참여자별 평 (lunch_id + reviewer_id PK, 별점 0.5 단위)
   - `reports` — 오늘의 보고 (date + author_id UNIQUE, 하루 1건 upsert)
   - `report_comments` — 보고 댓글 (report_id + author_id UNIQUE, 1인 1댓글 upsert, 본인 보고엔 불가)
   - `anniversaries` — 기념일 (kind: birthday/hire/wedding/custom, repeat: yearly/every100days/once, remind_days JSON)
+  - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note) — 캘린더에 🍽️ 뱃지, DatePanel에서 본인 것만 등록/삭제
+- 캘린더 점심 구분 3종: 🍜 쪼물런치(배달이면 🛵) · 🍽️ 개인 약속 · 🍱 도시락 — 도시락은 별도 데이터 없이 "쪼물런치(점심)도 개인 약속도 없는 평일(공휴일 제외)"에 자동 표시 (도시락/약속 라벨은 날짜 상세에서만, 캘린더 그리드엔 안 보임)
+- 캘린더 하단 "도시락 리포트": 보는 달의 **사람별** 도시락/쪼물런치/약속 일수 + 절약액(1일 8,000원) — 쪼물런치·약속은 예정(미래)도 포함, 도시락만 오늘까지 지난 평일 기준. 계산만, 저장 없음
 
 ## 도메인 메모
 
 - 멤버 식별: 근태 API는 **사번(empNo)**, 로그인은 **이메일/userId**. 매핑은 `src/lib/members.ts` + 프로필의 emp_no. "내 사번" = 프로필 empNo → 자동 감지(myEmpNo) 순으로 폴백.
 - 참여자 ID(`ParticipantId`) = 멤버 사번 + 퇴사자 등 추가 인물(`EXTRA_PARTICIPANTS`)
 - 기념일 반복: 입사(hire)는 100일 단위, 생일/결혼은 매년 고정. 기타(custom)만 매년/100일 단위/일회성 선택 가능. **당일 알림은 무조건 팝업**, 그 외는 remind_days 설정을 따름.
-- 첫 접속 팝업(`DailyPopup`): 오늘의 보고(남이 쓴 것) + 기념일 알림. 본 항목은 localStorage `zzomul.daily.seen.v1`에 기록.
+- 첫 접속 팝업(`DailyPopup`): 오늘의 보고(남이 쓴 것) + 기념일 알림 + 오늘의 내 운세(하루 1회). 본 항목은 localStorage `zzomul.daily.seen.v1`에 기록.
+- **운세**(`src/lib/fortune.ts`): 생일(anniversaries의 birthday) + 오늘 날짜를 시드로 한 결정적 생성 — DB 저장 없음, 같은 날 누가 봐도 동일. 생일 미등록 멤버는 운세 대신 등록 안내 표시.
+- **"다녀왔어요" 한줄평/별점은 누른 사람 본인의 평(lunch_reviews)으로 저장** — `lunches.comment`에 쓰면 안 됨 (과거 이관 로직이 남의 평으로 옮기는 버그가 있었음. 이관 로직은 제거됐고 재도입 금지).
 - 근태 상태 코드: `1` 정상근무 · `70005` 오후반차 · `70006` 휴가 · 그 외 "기타"
 - **공휴일**: `src/lib/holidays.ts`에 수동 관리 (대체공휴일 포함). ⚠ 연말마다 다음 해 날짜 추가 필요. 캘린더에 빨간 날짜+이름으로 표시.
 

@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { LuCode, LuX, LuExternalLink, LuEye } from 'react-icons/lu';
 import { DailyPopupView } from './DailyPopup';
 import { MEMBER_EMPNOS } from '../lib/members';
+import { getFortune } from '../lib/fortune';
 import type { ReportComment } from '../lib/reports';
 
 // 팝업 미리보기용 샘플 데이터 (실제 저장 안 됨)
@@ -191,7 +192,7 @@ export default function DevInfo() {
                   </li>
                   <li>
                     <Code>lunches</Code>: date · meal(lunch/dinner) · status(wishlist/done) ·
-                    restaurant · rating · link · participants(JSON)
+                    restaurant · rating · link · is_delivery · participants(JSON)
                   </li>
                   <li>
                     <Code>lunch_reviews</Code>: lunch_id + reviewer_id(PK) · rating(0.5 단위) ·
@@ -208,7 +209,19 @@ export default function DevInfo() {
                     <Code>anniversaries</Code>: owner_id · kind(birthday/hire/wedding/custom) ·
                     date · repeat(매년/100일/일회성) · remind_days(JSON)
                   </li>
+                  <li>
+                    <Code>lunch_plans</Code>: emp_no + date(PK) · note — 개인 점심 약속 (캘린더
+                    🍽️ 뱃지)
+                  </li>
                 </ul>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  캘린더 점심 구분: 🍜 쪼물런치(🛵 배달) · 🍽️ 개인 약속 · 🍱 도시락(둘 다 없는
+                  평일, 자동)
+                </p>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  운세 탭은 DB 저장 없음 — 생일+날짜 시드로 결정적 생성 (
+                  <Code>src/lib/fortune.ts</Code>)
+                </p>
                 <p className="mt-1 text-[11px] text-ink-400">
                   스키마 변경은 <Code>ensureSchema</Code>에서 ALTER TABLE 자동 처리
                 </p>
@@ -259,6 +272,7 @@ function PreviewPopup({ onClose }: { onClose: () => void }) {
       reports={sampleReports()}
       notices={sampleNotices()}
       comments={comments}
+      fortune={getFortune(previewMe, '1999-10-19', format(new Date(), 'yyyy-MM-dd'))}
       myId={previewMe}
       onAddComment={async (reportId, content) => {
         setComments((prev) => ({

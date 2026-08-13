@@ -27,6 +27,13 @@ import {
 } from '../lib/anniversaries';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
 import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
+import {
+  deleteLunchPlan,
+  ensureLunchPlansSchema,
+  listLunchPlans,
+  upsertLunchPlan,
+  type LunchPlan,
+} from '../lib/lunch-plans';
 import { holidayName } from '../lib/holidays';
 import {
   DOT_STYLES,
@@ -55,8 +62,8 @@ const ANNIV_STYLES: Record<AnniversaryKind, string> = {
 
 export default function CalendarPage() {
   const { session, logout } = useAuth();
-  const { getProfileByEmpNo, getStatus } = useProfiles();
-  const { resolveName } = useAppData();
+  const { getProfileByEmpNo, getProfile, getStatus } = useProfiles();
+  const { resolveName, myEmpNo } = useAppData();
   const { items: anniversaries } = useAnniversaries();
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -65,6 +72,11 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState<{ empNo: string; date: Date; record: AttendanceRecord | null } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calendarLunches, setCalendarLunches] = useState<Lunch[]>([]);
+  const [lunchPlans, setLunchPlans] = useState<LunchPlan[]>([]);
+
+  // 내 참여자 ID(사번): 프로필 저장값 우선, 없으면 자동 감지값 (LunchPage와 동일 규칙)
+  const me = session?.userId ? String(session.userId) : '';
+  const myPid = (me ? getProfile(me)?.empNo : '') || myEmpNo || '';
 
   const monthStart = useMemo(() => startOfMonth(cursor), [cursor]);
   const monthEnd = useMemo(() => endOfMonth(cursor), [cursor]);
@@ -102,25 +114,45 @@ export default function CalendarPage() {
   // 먹기록을 캘린더에 함께 표시:
   //  - '가고싶은' + 예정 날짜(plannedDate) 있는 것 → 예정 스타일
   //  - '다녀옴'(done) 전부 → 그 날짜(date)에 매핑
+  // (상세 패널에서 참여자 토글 후에도 재조회)
+  async function refreshCalendarLunches() {
+    try {
+      await ensureLunchesSchema();
+      const all = await listLunches();
+      setCalendarLunches(
+        all.filter((l) => (l.status === 'wishlist' && l.plannedDate) || l.status === 'done'),
+      );
+    } catch {
+      /* 실패해도 캘린더 자체는 정상 렌더 */
+    }
+  }
+
   useEffect(() => {
-    let cancelled = false;
-    ensureLunchesSchema()
-      .then(() => listLunches())
-      .then((all) => {
-        if (cancelled) return;
-        setCalendarLunches(
-          all.filter(
-            (l) => (l.status === 'wishlist' && l.plannedDate) || l.status === 'done',
-          ),
-        );
-      })
-      .catch(() => {
-        /* 실패해도 캘린더 자체는 정상 렌더 */
-      });
-    return () => {
-      cancelled = true;
-    };
+    void refreshCalendarLunches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 개인 점심 약속 로드 (등록/삭제 후에도 재사용)
+  async function refreshLunchPlans() {
+    try {
+      await ensureLunchPlansSchema();
+      setLunchPlans(await listLunchPlans());
+    } catch {
+      /* 실패해도 캘린더 자체는 정상 렌더 */
+    }
+  }
+
+  useEffect(() => {
+    void refreshLunchPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 날짜별 점심 약속
+  const plansByDate = useMemo(() => {
+    const map: Record<string, LunchPlan[]> = {};
+    for (const p of lunchPlans) (map[p.date] ??= []).push(p);
+    return map;
+  }, [lunchPlans]);
 
   // 각 먹기록이 캘린더에 얹힐 날짜 (wishlist는 plannedDate, done은 date)
   const lunchesByDate = useMemo(() => {
@@ -132,6 +164,15 @@ export default function CalendarPage() {
     }
     return map;
   }, [calendarLunches]);
+
+  // 도시락 날: 그 날짜에 쪼물런치(점심, 예정/다녀옴)도 없고 개인 점심 약속도 없으면
+  // 평소처럼 도시락을 먹는 날로 간주 (공휴일 제외). 디너 기록은 점심과 무관하므로 안 봄.
+  const isDosirakDay = (dateKey: string): boolean => {
+    if (holidayName(dateKey)) return false;
+    const hasZzomulLunch = (lunchesByDate[dateKey] ?? []).some((l) => l.meal === 'lunch');
+    const hasPlan = (plansByDate[dateKey] ?? []).length > 0;
+    return !hasZzomulLunch && !hasPlan;
+  };
 
   const byMember = useMemo(() => indexByMemberAndDate(records), [records]);
   const kindsInMonth = useMemo(() => {
@@ -151,6 +192,39 @@ export default function CalendarPage() {
     () => eachDayOfInterval({ start: monthStart, end: monthEnd }).filter((d) => !isWeekend(d)),
     [monthStart, monthEnd],
   );
+
+  // 이번 달 도시락 리포트: 사람별 집계.
+  // 판정은 상세 라벨과 동일한 우선순위 — 약속 > 쪼물런치 참여 > 도시락.
+  // 이미 잡힌 쪼물런치/약속은 미래여도 포함, 도시락만 "오늘까지 지난 평일" 기준
+  // (미래의 도시락은 아직 알 수 없으니까). 휴가·반차는 고려하지 않는 재미용 통계.
+  const dosirakStats = useMemo(() => {
+    const todayKey = format(new Date(), 'yyyy-MM-dd');
+    let counted = 0; // 도시락 판정 대상이 된 지나간 평일 수
+    const per: Record<string, { dosirak: number; zzomul: number; plan: number }> = {};
+    for (const emp of MEMBER_EMPNOS) per[emp] = { dosirak: 0, zzomul: 0, plan: 0 };
+    for (const day of monthDays) {
+      const key = format(day, 'yyyy-MM-dd');
+      if (holidayName(key)) continue;
+      const isPast = key <= todayKey;
+      if (isPast) counted += 1;
+      const dayLunches = lunchesByDate[key] ?? [];
+      const dayPlans = plansByDate[key] ?? [];
+      for (const emp of MEMBER_EMPNOS) {
+        const hasPlan = dayPlans.some((p) => p.empNo === emp);
+        const inZzomulLunch = dayLunches.some(
+          (l) =>
+            l.meal === 'lunch' &&
+            (l.participants.length === 0 || (l.participants as readonly string[]).includes(emp)),
+        );
+        if (hasPlan) per[emp].plan += 1;
+        else if (inZzomulLunch) per[emp].zzomul += 1;
+        else if (isPast) per[emp].dosirak += 1;
+      }
+    }
+    const hasAny =
+      counted > 0 || Object.values(per).some((s) => s.plan + s.zzomul > 0);
+    return { counted, per, hasAny };
+  }, [monthDays, lunchesByDate, plansByDate]);
 
   // 날짜별 기념일 배지 (그리드 범위 전체 계산)
   const annivByDate = useMemo(() => {
@@ -276,9 +350,20 @@ export default function CalendarPage() {
                         className={`text-[10px] leading-tight px-1.5 py-0.5 rounded-full border truncate ${lunchBadgeStyle(l)} ${
                           inMonth ? '' : 'opacity-50'
                         }`}
-                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'} · ${l.restaurant}${l.menu ? ` (${l.menu})` : ''}`}
+                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'}${l.delivery ? ' · 배달' : ''} · ${l.restaurant}${l.menu ? ` (${l.menu})` : ''}`}
                       >
-                        {l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                        {l.delivery ? '🛵' : l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                      </div>
+                    ))}
+                    {plansByDate[dateKey]?.map((p) => (
+                      <div
+                        key={`plan-${p.empNo}`}
+                        className={`text-[10px] leading-tight px-1.5 py-0.5 rounded-full border truncate bg-teal-50 text-teal-700 border-teal-100 ${
+                          inMonth ? '' : 'opacity-50'
+                        }`}
+                        title={`${resolveName(p.empNo)} 점심 약속${p.note ? ` · ${p.note}` : ''}`}
+                      >
+                        🍽️ {resolveName(p.empNo)} 약속
                       </div>
                     ))}
                     {inMonth ? (
@@ -385,9 +470,18 @@ export default function CalendarPage() {
                       <span
                         key={`lunch-${l.id}`}
                         className={`text-[10px] px-1.5 py-0.5 rounded-full border ${lunchBadgeStyle(l)}`}
-                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'} · ${l.restaurant}`}
+                        title={`${l.status === 'wishlist' ? '예정' : '다녀옴'}${l.delivery ? ' · 배달' : ''} · ${l.restaurant}`}
                       >
-                        {l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                        {l.delivery ? '🛵' : l.meal === 'lunch' ? '🍜' : '🌙'} {l.restaurant}
+                      </span>
+                    ))}
+                    {plansByDate[dateKey]?.map((p) => (
+                      <span
+                        key={`plan-${p.empNo}`}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full border bg-teal-50 text-teal-700 border-teal-100"
+                        title={`${resolveName(p.empNo)} 점심 약속${p.note ? ` · ${p.note}` : ''}`}
+                      >
+                        🍽️ {resolveName(p.empNo)} 약속
                       </span>
                     ))}
                   </header>
@@ -458,6 +552,45 @@ export default function CalendarPage() {
         ) : null}
       </div>
 
+      {/* 이번 달 도시락 리포트 — 사람별 재미 통계 (예정된 쪼물런치/약속 포함) */}
+      {dosirakStats.hasAny ? (
+        <section className="mt-4 rounded-2xl border border-lime-100 bg-lime-50/40 px-4 py-3">
+          <h2 className="text-xs font-semibold text-ink-900 mb-2">
+            🍱 {format(cursor, 'M월', { locale: ko })} 도시락 리포트
+          </h2>
+          <ul className="space-y-1.5">
+            {MEMBER_EMPNOS.map((emp) => {
+              const s = dosirakStats.per[emp];
+              const name = resolveName(emp);
+              return (
+                <li key={emp} className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px]">
+                  <Avatar profile={getProfileByEmpNo(emp)} size="xs" fallbackText={name} />
+                  <span className="font-semibold text-ink-800 w-14 truncate">{name}</span>
+                  <span className="px-1.5 py-0.5 rounded-full border bg-white text-lime-700 border-lime-200 font-medium">
+                    🍱 {s.dosirak}일
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full border bg-white text-amber-700 border-amber-200 font-medium">
+                    🍜 {s.zzomul}일
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full border bg-white text-teal-700 border-teal-200 font-medium">
+                    🍽️ {s.plan}일
+                  </span>
+                  {s.dosirak > 0 ? (
+                    <span className="sm:ml-auto font-semibold text-lime-700">
+                      💰 약 {(s.dosirak * 8000).toLocaleString()}원 절약!
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[10px] text-ink-400">
+            🍜·🍽️는 예정 포함, 🍱는 오늘까지 지난 평일({dosirakStats.counted}일) 기준 · 도시락
+            하루 = 외식 한 끼 8,000원 절약으로 계산했어요
+          </p>
+        </section>
+      ) : null}
+
       {selected ? (
         <MemberProfileModal
           empNo={selected.empNo}
@@ -476,6 +609,18 @@ export default function CalendarPage() {
               byMember[emp]?.[format(selectedDate, 'yyyy-MM-dd')],
             ]),
           )}
+          plans={plansByDate[format(selectedDate, 'yyyy-MM-dd')] ?? []}
+          lunches={lunchesByDate[format(selectedDate, 'yyyy-MM-dd')] ?? []}
+          isDosirak={isDosirakDay(format(selectedDate, 'yyyy-MM-dd'))}
+          myEmpNo={myPid}
+          onSavePlanFor={async (empNo, note) => {
+            await upsertLunchPlan(empNo, format(selectedDate, 'yyyy-MM-dd'), note);
+            await refreshLunchPlans();
+          }}
+          onDeletePlanFor={async (empNo) => {
+            await deleteLunchPlan(empNo, format(selectedDate, 'yyyy-MM-dd'));
+            await refreshLunchPlans();
+          }}
           onClose={() => setSelectedDate(null)}
         />
       ) : null}

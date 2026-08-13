@@ -11,9 +11,6 @@ export type LunchReview = {
   updatedAt: string;
 };
 
-// 기존 lunches.comment(한줄평)의 작성자 — 고민채 사번
-const LEGACY_COMMENT_OWNER = '2023124';
-
 export async function ensureReviewsSchema(): Promise<void> {
   const db = getDb();
   await db.execute(`
@@ -26,25 +23,8 @@ export async function ensureReviewsSchema(): Promise<void> {
       PRIMARY KEY (lunch_id, reviewer_id)
     )
   `);
-  // 1회성 이관: 기존 한줄평(lunches.comment)을 고민채의 평으로 옮김.
-  // 옮긴 뒤 원본 comment를 비우므로 재실행돼도 중복 생성되지 않음.
-  try {
-    await db.execute(`
-      INSERT INTO lunch_reviews (lunch_id, reviewer_id, rating, comment)
-      SELECT l.id, '${LEGACY_COMMENT_OWNER}', l.rating, l.comment
-      FROM lunches l
-      WHERE l.status = 'done' AND TRIM(l.comment) != ''
-        AND NOT EXISTS (
-          SELECT 1 FROM lunch_reviews r
-          WHERE r.lunch_id = l.id AND r.reviewer_id = '${LEGACY_COMMENT_OWNER}'
-        )
-    `);
-    await db.execute(
-      `UPDATE lunches SET comment = '' WHERE status = 'done' AND TRIM(comment) != ''`,
-    );
-  } catch {
-    // lunches 테이블이 아직 없는 첫 실행 등 — 다음 실행에서 다시 시도됨
-  }
+  // ⚠ 예전에 있던 "lunches.comment → 고민채 평" 1회성 이관은 제거됨 —
+  // 다녀왔어요 한줄평까지 남의 평으로 옮겨버리는 버그의 원인이었음. 재도입 금지.
 }
 
 // 전체 리뷰를 한 번에 읽어 lunchId별로 그룹핑 (기록 목록 화면에서 join 대신 사용)
