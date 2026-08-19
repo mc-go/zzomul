@@ -68,6 +68,24 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calendarLunches, setCalendarLunches] = useState<Lunch[]>([]);
   const [lunchPlans, setLunchPlans] = useState<LunchPlan[]>([]);
+  // "오늘" 기준일 — 탭을 며칠 켜둬도 복귀 시 갱신되도록 state로 관리
+  // (도시락 리포트의 "오늘까지" 판정과 캘린더 오늘 하이라이트가 이 값을 씀)
+  const [todayKey, setTodayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+
+  useEffect(() => {
+    // 탭 복귀(visibilitychange)·창 포커스 시 날짜가 넘어갔으면 갱신.
+    // 같은 날이면 문자열이 동일해 setState가 리렌더를 일으키지 않음.
+    const syncToday = () => {
+      if (document.visibilityState === 'hidden') return;
+      setTodayKey(format(new Date(), 'yyyy-MM-dd'));
+    };
+    document.addEventListener('visibilitychange', syncToday);
+    window.addEventListener('focus', syncToday);
+    return () => {
+      document.removeEventListener('visibilitychange', syncToday);
+      window.removeEventListener('focus', syncToday);
+    };
+  }, []);
 
   // 내 참여자 ID(사번): 프로필 저장값 우선, 없으면 자동 감지값 (LunchPage와 동일 규칙)
   const me = session?.userId ? String(session.userId) : '';
@@ -168,7 +186,8 @@ export default function CalendarPage() {
     for (const r of records) set.add(kindFor(r.attendanceStatus));
     return set;
   }, [records]);
-  const today = new Date();
+  // todayKey에서 파생 — 'T00:00:00'을 붙이면 로컬 자정으로 파싱됨 (isSameDay 비교용)
+  const today = useMemo(() => new Date(`${todayKey}T00:00:00`), [todayKey]);
 
   const gridDays = useMemo(() => {
     const start = startOfWeek(monthStart, { weekStartsOn: 1 });
@@ -215,7 +234,6 @@ export default function CalendarPage() {
   // (미래의 도시락은 아직 알 수 없으니까).
   // 점심시간에 회사에 없는 날(연차·안식휴가·오전 반차)은 도시락으로 안 침 — isAwayAtLunch 참고.
   const dosirakStats = useMemo(() => {
-    const todayKey = format(new Date(), 'yyyy-MM-dd');
     let counted = 0; // 도시락 판정 대상이 된 지나간 평일 수
     const per: Record<string, { dosirak: number; zzomul: number; plan: number }> = {};
     for (const emp of MEMBER_EMPNOS) per[emp] = { dosirak: 0, zzomul: 0, plan: 0 };
@@ -241,7 +259,7 @@ export default function CalendarPage() {
     const hasAny =
       counted > 0 || Object.values(per).some((s) => s.plan + s.zzomul > 0);
     return { counted, per, hasAny };
-  }, [monthDays, lunchesByDate, plansByDate, byMember]);
+  }, [monthDays, lunchesByDate, plansByDate, byMember, todayKey]);
 
   // 날짜별 기념일 배지 (그리드 범위 전체 계산)
   const annivByDate = useMemo(() => {
