@@ -15,8 +15,9 @@ export type Fortune = {
 };
 
 // ----- 시드 & PRNG (xmur3 + mulberry32) -----
+// 밸런스 게임(balance.ts) 등 다른 "날짜 시드 결정적 생성"에서도 재사용
 
-function hashSeed(str: string): number {
+export function hashSeed(str: string): number {
   let h = 1779033703 ^ str.length;
   for (let i = 0; i < str.length; i++) {
     h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
@@ -27,7 +28,7 @@ function hashSeed(str: string): number {
   return (h ^= h >>> 16) >>> 0;
 }
 
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed;
   return () => {
     a |= 0;

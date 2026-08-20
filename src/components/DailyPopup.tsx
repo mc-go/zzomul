@@ -13,6 +13,16 @@ import {
 } from '../lib/reports';
 import { noticesForToday, type AnniversaryNotice } from '../lib/anniversaries';
 import { getFortune, type Fortune } from '../lib/fortune';
+import {
+  ensureBalanceSchema,
+  getBalanceQuestion,
+  listBalanceVotes,
+  upsertBalanceVote,
+  type BalanceChoice,
+  type BalanceQuestion,
+  type BalanceVote,
+} from '../lib/balance';
+import { isValidParticipantId } from '../lib/members';
 import { ScoreStars } from '../pages/FortunePage';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
@@ -23,7 +33,9 @@ import Avatar from './Avatar';
 //  - 다른 사람이 쓴 오늘의 보고 (안 본 것만)
 //  - 기념일 알림 (당일은 무조건, 그 외엔 설정한 며칠 전)
 //  - 오늘의 내 운세 (생일 등록된 경우, 하루 1회)
+//  - 오늘의 밸런스 게임 (하루 1회, 투표는 balance_votes에 저장)
 // 본 항목은 localStorage에 기록해서 다시 안 띄움.
+// 항목이 2종류 이상이면 상단 탭으로 구분해서 보여줌.
 
 const SEEN_KEY = 'zzomul.daily.seen.v1';
 
@@ -145,6 +157,9 @@ export default function DailyPopup({ myId }: { myId: string }) {
   const [notices, setNotices] = useState<AnniversaryNotice[]>([]);
   const [fortune, setFortune] = useState<Fortune | null>(null);
   const [fortuneKey, setFortuneKey] = useState('');
+  const [balance, setBalance] = useState<BalanceQuestion | null>(null);
+  const [balanceVotes, setBalanceVotes] = useState<BalanceVote[]>([]);
+  const [balanceKey, setBalanceKey] = useState('');
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -178,12 +193,24 @@ export default function DailyPopup({ myId }: { myId: string }) {
         : '';
       const fKey = `fortune-${myId}-${today}`;
       const freshFortune = myBirthday && !seen[fKey] ? getFortune(myId, myBirthday, today) : null;
-      if (freshReports.length > 0 || freshNotices.length > 0 || freshFortune) {
+      // 오늘의 밸런스 게임: 투표 가능한 멤버(사번 확인)에게만, 하루 1회
+      const bKey = `balance-${myId}-${today}`;
+      let freshBalance: BalanceQuestion | null = null;
+      let freshVotes: BalanceVote[] = [];
+      if (isValidParticipantId(myId) && !seen[bKey]) {
+        await ensureBalanceSchema();
+        freshBalance = getBalanceQuestion(today);
+        freshVotes = await listBalanceVotes(today);
+      }
+      if (freshReports.length > 0 || freshNotices.length > 0 || freshFortune || freshBalance) {
         setReports(freshReports);
         setComments(await listCommentsForReports(freshReports.map((r) => r.id)));
         setNotices(freshNotices);
         setFortune(freshFortune);
         setFortuneKey(freshFortune ? fKey : '');
+        setBalance(freshBalance);
+        setBalanceVotes(freshVotes);
+        setBalanceKey(freshBalance ? bKey : '');
         setOpen(true);
       }
     } catch {
@@ -197,11 +224,20 @@ export default function DailyPopup({ myId }: { myId: string }) {
     setComments(await listCommentsForReports(reports.map((r) => r.id)));
   }
 
+  // 밸런스 투표 (1인 1표 — 다시 누르면 변경)
+  async function handleBalanceVote(choice: BalanceChoice) {
+    if (!isValidParticipantId(myId)) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    await upsertBalanceVote(today, myId, choice);
+    setBalanceVotes(await listBalanceVotes(today));
+  }
+
   function close() {
     markSeen([
       ...reports.map(reportKey),
       ...notices.map((n) => n.key),
       ...(fortuneKey ? [fortuneKey] : []),
+      ...(balanceKey ? [balanceKey] : []),
     ]);
     setOpen(false);
   }
@@ -214,6 +250,9 @@ export default function DailyPopup({ myId }: { myId: string }) {
       notices={notices}
       comments={comments}
       fortune={fortune}
+      balance={balance}
+      balanceVotes={balanceVotes}
+      onBalanceVote={handleBalanceVote}
       myId={myId}
       onAddComment={myId ? handleAddComment : undefined}
       onClose={close}
@@ -221,12 +260,25 @@ export default function DailyPopup({ myId }: { myId: string }) {
   );
 }
 
+// 팝업 탭 종류 — 항목이 2종류 이상일 때만 탭 바가 보임
+type PopupTab = 'anniv' | 'fortune' | 'report' | 'balance';
+
+const TAB_LABEL: Record<PopupTab, string> = {
+  anniv: '🎉 기념일',
+  fortune: '🔮 운세',
+  report: '📢 보고',
+  balance: '⚖️ 밸런스',
+};
+
 // 팝업 렌더링만 담당 — DevInfo의 "미리보기"에서도 샘플 데이터로 재사용
 export function DailyPopupView({
   reports,
   notices,
   comments = {},
   fortune = null,
+  balance = null,
+  balanceVotes = [],
+  onBalanceVote,
   myId = '',
   onAddComment,
   onClose,
@@ -235,6 +287,9 @@ export function DailyPopupView({
   notices: AnniversaryNotice[];
   comments?: Record<number, ReportComment[]>;
   fortune?: Fortune | null;
+  balance?: BalanceQuestion | null;
+  balanceVotes?: BalanceVote[];
+  onBalanceVote?: (choice: BalanceChoice) => Promise<void>;
   myId?: string;
   onAddComment?: (reportId: number, content: string) => Promise<void>;
   onClose: () => void;
@@ -243,6 +298,15 @@ export function DailyPopupView({
   const { resolveName } = useAppData();
   const dayOf = notices.filter((n) => n.daysUntil === 0);
   const upcoming = notices.filter((n) => n.daysUntil > 0);
+
+  // 내용이 있는 탭만 순서대로 (기념일 → 운세 → 보고 → 밸런스)
+  const tabs: PopupTab[] = [
+    ...(notices.length > 0 ? (['anniv'] as const) : []),
+    ...(fortune ? (['fortune'] as const) : []),
+    ...(reports.length > 0 ? (['report'] as const) : []),
+    ...(balance ? (['balance'] as const) : []),
+  ];
+  const [active, setActive] = useState<PopupTab>(tabs[0] ?? 'report');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 backdrop-blur-sm p-4">
@@ -253,7 +317,7 @@ export function DailyPopupView({
         role="dialog"
         aria-modal="true"
       >
-        <header className="relative px-5 pt-6 pb-4 text-center">
+        <header className="relative px-5 pt-6 pb-3 text-center">
           <button
             type="button"
             onClick={onClose}
@@ -271,9 +335,29 @@ export function DailyPopupView({
           </p>
         </header>
 
+        {/* 소식 종류가 2개 이상이면 탭으로 구분 */}
+        {tabs.length >= 2 ? (
+          <nav className="flex items-center justify-center gap-1 px-5 pb-3">
+            {tabs.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActive(t)}
+                className={`h-7 px-2.5 rounded-full text-[11px] font-medium transition-colors ${
+                  active === t
+                    ? 'bg-ink-900 text-white'
+                    : 'bg-white text-ink-500 border border-ink-200 hover:border-ink-400'
+                }`}
+              >
+                {TAB_LABEL[t]}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+
         <div className="px-5 pb-4 space-y-4 overflow-y-auto">
           {/* 기념일 당일 — 크게 축하 */}
-          {dayOf.length > 0 ? (
+          {active === 'anniv' && dayOf.length > 0 ? (
             <ul className="space-y-2">
               {dayOf.map((n) => (
                 <li
@@ -289,7 +373,7 @@ export function DailyPopupView({
           ) : null}
 
           {/* 오늘의 내 운세 (그 날 첫 진입 시 1회) */}
-          {fortune ? (
+          {active === 'fortune' && fortune ? (
             <div>
               <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">🔮 오늘의 내 운세</h3>
               <div className="rounded-2xl border border-violet-200 bg-gradient-to-b from-violet-50/80 to-white px-4 py-3">
@@ -318,7 +402,7 @@ export function DailyPopupView({
           ) : null}
 
           {/* 다가오는 기념일 (D-n) */}
-          {upcoming.length > 0 ? (
+          {active === 'anniv' && upcoming.length > 0 ? (
             <div>
               <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">🗓️ 다가오는 기념일</h3>
               <ul className="space-y-1.5">
@@ -339,7 +423,7 @@ export function DailyPopupView({
           ) : null}
 
           {/* 오늘의 보고 */}
-          {reports.length > 0 ? (
+          {active === 'report' && reports.length > 0 ? (
             <div>
               <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">📢 오늘의 보고</h3>
               <ul className="space-y-1.5">
@@ -380,6 +464,18 @@ export function DailyPopupView({
               </ul>
             </div>
           ) : null}
+
+          {/* 오늘의 밸런스 게임 */}
+          {active === 'balance' && balance ? (
+            <BalanceSection
+              question={balance}
+              votes={balanceVotes}
+              myId={myId}
+              onVote={onBalanceVote}
+              resolveName={resolveName}
+              getProfile={getProfileByEmpNo}
+            />
+          ) : null}
         </div>
 
         <footer className="px-5 pb-5 pt-1">
@@ -391,6 +487,104 @@ export function DailyPopupView({
             확인했어요! 👍
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// 오늘의 밸런스 게임 — 내가 투표하기 전엔 결과를 가려서 눈치보기 방지.
+// 투표 후엔 양쪽 득표와 누가 뭘 골랐는지 공개. 다시 누르면 변경.
+// 팝업과 아무거나 탭(MemoPage)에서 공용.
+export function BalanceSection({
+  question,
+  votes,
+  myId,
+  onVote,
+  resolveName,
+  getProfile,
+}: {
+  question: BalanceQuestion;
+  votes: BalanceVote[];
+  myId: string;
+  onVote?: (choice: BalanceChoice) => Promise<void>;
+  resolveName: (id: string) => string;
+  getProfile: (id: string) => import('../lib/profiles').Profile | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const myVote = votes.find((v) => v.voterId === myId)?.choice ?? null;
+
+  async function vote(choice: BalanceChoice) {
+    if (!onVote || busy || myVote === choice) return;
+    setBusy(true);
+    try {
+      await onVote(choice);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const side = (choice: BalanceChoice) => {
+    const label = choice === 'a' ? question.a : question.b;
+    const voters = votes.filter((v) => v.choice === choice);
+    const picked = myVote === choice;
+    return (
+      <button
+        type="button"
+        disabled={busy || !onVote}
+        onClick={() => vote(choice)}
+        className={`flex-1 min-w-0 rounded-2xl border-2 px-3 py-3 text-center transition-all active:scale-[0.97] ${
+          picked
+            ? 'border-pretzel bg-pretzel/10 shadow-card'
+            : myVote
+              ? 'border-ink-100 bg-white opacity-70 hover:opacity-100'
+              : 'border-ink-200 bg-white hover:border-pretzel/50 hover:-translate-y-0.5'
+        }`}
+      >
+        <p className="text-sm font-bold text-ink-900 whitespace-pre-wrap break-keep">{label}</p>
+        {/* 결과는 내가 투표한 뒤에만 공개 */}
+        {myVote ? (
+          <div className="mt-2">
+            <p className={`text-lg font-bold ${picked ? 'text-pretzel' : 'text-ink-400'}`}>
+              {voters.length}표
+            </p>
+            {voters.length > 0 ? (
+              <div className="mt-1 flex items-center justify-center gap-1 flex-wrap">
+                {voters.map((v) => (
+                  <span
+                    key={v.voterId}
+                    className="inline-flex items-center gap-1 text-[10px] text-ink-600"
+                    title={resolveName(v.voterId)}
+                  >
+                    <Avatar
+                      profile={getProfile(v.voterId)}
+                      size="xs"
+                      fallbackText={resolveName(v.voterId)}
+                    />
+                    {resolveName(v.voterId)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </button>
+    );
+  };
+
+  return (
+    <div>
+      <div className="rounded-2xl border border-orange-200 bg-gradient-to-b from-orange-50/80 to-white px-4 py-3">
+        <p className="text-center text-sm font-bold text-ink-900">{question.topic}</p>
+        <div className="mt-3 flex items-stretch gap-2">
+          {side('a')}
+          <span className="self-center shrink-0 text-[10px] font-bold text-orange-400">VS</span>
+          {side('b')}
+        </div>
+        <p className="mt-2 text-center text-[10px] text-ink-400">
+          {myVote
+            ? '다른 걸 누르면 투표를 바꿀 수 있어요'
+            : '투표하면 친구들의 선택이 보여요 👀'}
+        </p>
       </div>
     </div>
   );

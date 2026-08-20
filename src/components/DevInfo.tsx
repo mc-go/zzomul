@@ -4,6 +4,7 @@ import { LuCode, LuX, LuExternalLink, LuEye } from 'react-icons/lu';
 import { DailyPopupView } from './DailyPopup';
 import { MEMBER_EMPNOS } from '../lib/members';
 import { getFortune } from '../lib/fortune';
+import { getBalanceQuestion, type BalanceVote } from '../lib/balance';
 import type { ReportComment } from '../lib/reports';
 
 // 팝업 미리보기용 샘플 데이터 (실제 저장 안 됨)
@@ -213,6 +214,10 @@ export default function DevInfo() {
                     <Code>lunch_plans</Code>: emp_no + date(PK) · note — 개인 점심 약속 (캘린더
                     🍽️ 뱃지)
                   </li>
+                  <li>
+                    <Code>balance_votes</Code>: date + voter_id(PK) · choice — 오늘의 밸런스 게임
+                    1인 1표
+                  </li>
                 </ul>
                 <p className="mt-1 text-[11px] text-ink-400">
                   캘린더 점심 구분: 🍜 쪼물런치(🛵 배달) · 🍽️ 개인 약속 · 🍱 도시락(둘 다 없는
@@ -226,6 +231,11 @@ export default function DevInfo() {
                 <p className="mt-1 text-[11px] text-ink-400">
                   운세 탭은 DB 저장 없음 — 생일+날짜 시드로 결정적 생성 (
                   <Code>src/lib/fortune.ts</Code>)
+                </p>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  먹기록 탭 상단 "올해 어워드", 단골 n회차 뱃지, 캘린더 상단 위젯(온도·기념일·
+                  빨간날·보고)도 전부 계산만 — DB 저장 없음 (도시락왕은 올해치 근태를 따로 1회
+                  조회). 밸런스 게임 질문도 날짜 시드 생성이고 투표만 저장해요
                 </p>
                 <p className="mt-1 text-[11px] text-ink-400">
                   스키마 변경은 <Code>ensureSchema</Code>에서 ALTER TABLE 자동 처리
@@ -263,21 +273,33 @@ export default function DevInfo() {
   );
 }
 
-// 샘플 데이터로 팝업을 그대로 띄워보는 미리보기 (댓글도 로컬에서만 동작)
+// 샘플 데이터로 팝업을 그대로 띄워보는 미리보기 (댓글/투표도 로컬에서만 동작)
 function PreviewPopup({ onClose }: { onClose: () => void }) {
   const previewMe = MEMBER_EMPNOS[0];
+  const today = format(new Date(), 'yyyy-MM-dd');
   const [comments, setComments] = useState<Record<number, ReportComment[]>>({
     [-1]: [
       { id: -10, reportId: -1, authorId: MEMBER_EMPNOS[2], content: '몸조리 잘해요~ 🙌', createdAt: '' },
     ],
   });
+  const [votes, setVotes] = useState<BalanceVote[]>([
+    { date: today, voterId: MEMBER_EMPNOS[2], choice: 'b', updatedAt: '' },
+  ]);
 
   return (
     <DailyPopupView
       reports={sampleReports()}
       notices={sampleNotices()}
       comments={comments}
-      fortune={getFortune(previewMe, '1999-10-19', format(new Date(), 'yyyy-MM-dd'))}
+      fortune={getFortune(previewMe, '1999-10-19', today)}
+      balance={getBalanceQuestion(today)}
+      balanceVotes={votes}
+      onBalanceVote={async (choice) => {
+        setVotes((prev) => [
+          ...prev.filter((v) => v.voterId !== previewMe),
+          { date: today, voterId: previewMe, choice, updatedAt: '' },
+        ]);
+      }}
       myId={previewMe}
       onAddComment={async (reportId, content) => {
         setComments((prev) => ({

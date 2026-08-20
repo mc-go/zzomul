@@ -42,6 +42,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import Avatar from '../components/Avatar';
+import LunchAwards, { normalizeRestaurant } from '../components/LunchAwards';
 
 const MEAL_LABEL: Record<MealType, string> = {
   lunch: '쪼물런치',
@@ -89,17 +90,19 @@ export default function LunchPage() {
 
   const memberName = useMemo(() => (id: string) => resolveName(id), [resolveName]);
 
-  // 가고싶은 정렬: 런치 먼저 → 디너, 각 그룹 안에선 예정 날짜 있는 게 위(가까운 순), 나머지는 최신순
+  // 가고싶은 정렬: 날짜 정해진 건 런치/디너 무관하게 가까운 날짜순으로 맨 위,
+  // 날짜 없는 건 런치 먼저 → 디너, 각 그룹 안에선 최신순
   const wishlist = useMemo(() => {
     const mealRank = (l: Lunch) => (l.meal === 'lunch' ? 0 : 1);
     return lunches
       .filter((l) => l.status === 'wishlist')
       .sort((a, b) => {
-        if (mealRank(a) !== mealRank(b)) return mealRank(a) - mealRank(b);
         if (!!a.plannedDate !== !!b.plannedDate) return a.plannedDate ? -1 : 1;
-        if (a.plannedDate && b.plannedDate && a.plannedDate !== b.plannedDate) {
-          return a.plannedDate.localeCompare(b.plannedDate);
+        if (a.plannedDate && b.plannedDate) {
+          if (a.plannedDate !== b.plannedDate) return a.plannedDate.localeCompare(b.plannedDate);
+          return b.id - a.id;
         }
+        if (mealRank(a) !== mealRank(b)) return mealRank(a) - mealRank(b);
         return b.id - a.id;
       });
   }, [lunches]);
@@ -111,6 +114,29 @@ export default function LunchPage() {
     () => lunches.filter((l) => l.status === 'done' && l.meal === 'dinner'),
     [lunches],
   );
+
+  // 단골 뱃지: 같은 가게(공백·대소문자 무시)를 2번 이상 갔으면 2회차부터 방문 회차를 붙인다.
+  // lunchId → n회차. 다녀온(done) 기록만 세고, 회차는 다녀온 날짜순.
+  const visitOrdinals = useMemo(() => {
+    const byPlace: Record<string, Lunch[]> = {};
+    for (const l of lunches) {
+      if (l.status !== 'done') continue;
+      const key = normalizeRestaurant(l.restaurant);
+      if (!key) continue;
+      (byPlace[key] ??= []).push(l);
+    }
+    const map: Record<number, number> = {};
+    for (const group of Object.values(byPlace)) {
+      if (group.length < 2) continue;
+      const sorted = [...group].sort((a, b) =>
+        a.date === b.date ? a.id - b.id : a.date.localeCompare(b.date),
+      );
+      sorted.forEach((l, i) => {
+        if (i >= 1) map[l.id] = i + 1;
+      });
+    }
+    return map;
+  }, [lunches]);
 
   async function handleCreate(input: Parameters<typeof createLunch>[0]) {
     await createLunch(input);
@@ -196,6 +222,8 @@ export default function LunchPage() {
         <div className="text-xs text-ink-400">불러오는 중...</div>
       ) : (
         <div className="space-y-8">
+          <LunchAwards lunches={lunches} reviews={reviews} memberName={memberName} />
+
           <WishlistSection
             records={wishlist}
             onAdd={(meal) => setForm({ kind: 'add', status: 'wishlist', meal })}
@@ -210,6 +238,7 @@ export default function LunchPage() {
             title={`🍜 ${MEAL_LABEL.lunch}`}
             collapseKey="zzomul.done.lunch.collapsed.v1"
             records={lunchDone}
+            visitOrdinals={visitOrdinals}
             reviews={reviews}
             myPid={myPid}
             onAdd={() => setForm({ kind: 'add', status: 'done', meal: 'lunch' })}
@@ -224,6 +253,7 @@ export default function LunchPage() {
             title={`🌙 ${MEAL_LABEL.dinner}`}
             collapseKey="zzomul.done.dinner.collapsed.v1"
             records={dinnerDone}
+            visitOrdinals={visitOrdinals}
             reviews={reviews}
             myPid={myPid}
             onAdd={() => setForm({ kind: 'add', status: 'done', meal: 'dinner' })}
@@ -452,6 +482,7 @@ function DoneSection({
   title,
   collapseKey,
   records,
+  visitOrdinals,
   reviews,
   myPid,
   onAdd,
@@ -464,6 +495,7 @@ function DoneSection({
   title: string;
   collapseKey: string;
   records: Lunch[];
+  visitOrdinals: Record<number, number>; // lunchId → 단골 n회차 (2회차부터)
   reviews: Record<number, LunchReview[]>;
   myPid: string;
   onAdd: () => void;
@@ -543,6 +575,11 @@ function DoneSection({
                         {format(new Date(lunch.date), 'M월 d일 (EEE)', { locale: ko })}
                       </span>
                       {lunch.delivery ? <DeliveryChip /> : null}
+                      {visitOrdinals[lunch.id] ? (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-100">
+                          🔥 단골 {visitOrdinals[lunch.id]}회차
+                        </span>
+                      ) : null}
                       {/* 리뷰가 있으면 평균, 없으면 기존 단일 별점 */}
                       <StarRating value={avg ?? lunch.rating} size="sm" readOnly />
                       {avg != null ? (

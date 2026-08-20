@@ -10,10 +10,20 @@ import {
   updateMemo,
   type Memo,
 } from '../lib/memos';
+import {
+  ensureBalanceSchema,
+  getBalanceQuestion,
+  listBalanceVotes,
+  upsertBalanceVote,
+  type BalanceChoice,
+  type BalanceVote,
+} from '../lib/balance';
+import { isValidParticipantId } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import Avatar from '../components/Avatar';
+import { BalanceSection } from '../components/DailyPopup';
 
 export default function MemoPage() {
   const { session } = useAuth();
@@ -28,6 +38,31 @@ export default function MemoPage() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Memo | null>(null);
+  // 오늘의 밸런스 게임 — 팝업을 닫은 뒤에도 여기서 결과 확인/재투표 가능
+  const [todayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const balanceQuestion = getBalanceQuestion(todayKey);
+  const [balanceVotes, setBalanceVotes] = useState<BalanceVote[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureBalanceSchema()
+      .then(() => listBalanceVotes(todayKey))
+      .then((rows) => {
+        if (!cancelled) setBalanceVotes(rows);
+      })
+      .catch(() => {
+        /* 조회 실패 시 밸런스 카드만 생략 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [todayKey]);
+
+  async function handleBalanceVote(choice: BalanceChoice) {
+    if (!isValidParticipantId(myPid)) return;
+    await upsertBalanceVote(todayKey, myPid, choice);
+    setBalanceVotes(await listBalanceVotes(todayKey));
+  }
 
   async function refresh() {
     setLoading(true);
@@ -91,6 +126,20 @@ export default function MemoPage() {
           {memos.length > 0 ? `총 ${memos.length}개` : '자유롭게 뭐든 적어봐요'}
         </p>
       </div>
+
+      {/* 오늘의 밸런스 게임 — 투표 전엔 결과 비공개 (팝업과 동일 규칙) */}
+      {balanceVotes !== null ? (
+        <div className="mb-6">
+          <BalanceSection
+            question={balanceQuestion}
+            votes={balanceVotes}
+            myId={myPid}
+            onVote={isValidParticipantId(myPid) ? handleBalanceVote : undefined}
+            resolveName={resolveName}
+            getProfile={getProfileByEmpNo}
+          />
+        </div>
+      ) : null}
 
       {canWrite ? (
         <form onSubmit={submit} className="mb-6 rounded-2xl border border-ink-100 bg-white p-4 shadow-card">
