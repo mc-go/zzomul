@@ -162,7 +162,6 @@ export default function LunchPage() {
     await promoteLunch({
       id: input.id,
       date: input.date,
-      rating: input.rating,
       participants: input.participants,
     });
     if (isValidParticipantId(myPid)) {
@@ -854,7 +853,6 @@ function RecordForm({
     restaurant: string;
     menu: string;
     rating: number;
-    comment: string;
     link: string;
     plannedDate: string | null;
     delivery: boolean;
@@ -868,7 +866,6 @@ function RecordForm({
     restaurant: string;
     menu: string;
     rating: number;
-    comment: string;
     link: string;
     plannedDate: string | null;
     delivery: boolean;
@@ -888,7 +885,6 @@ function RecordForm({
   );
   const [restaurant, setRestaurant] = useState(isEdit ? mode.lunch.restaurant : '');
   const [menu, setMenu] = useState(isEdit ? mode.lunch.menu : '');
-  const [rating, setRating] = useState(isEdit ? mode.lunch.rating || 4 : 4);
   const [link, setLink] = useState(isEdit ? mode.lunch.link : '');
   const [delivery, setDelivery] = useState(isEdit ? mode.lunch.delivery : false);
   const [participants, setParticipants] = useState<ParticipantId[]>(
@@ -923,9 +919,7 @@ function RecordForm({
         meal,
         restaurant: restaurant.trim(),
         menu: menu.trim(),
-        rating: isWishlist ? 0 : rating,
-        // 한줄평은 참여자별 평(lunch_reviews)으로 대체됨 — 기존 값만 보존
-        comment: isEdit ? mode.lunch.comment : '',
+        rating: isEdit ? mode.lunch.rating : 0,
         link: link.trim(),
         plannedDate: isWishlist ? plannedDate || null : null,
         delivery,
@@ -1048,12 +1042,6 @@ function RecordForm({
             className="w-full h-10 px-3 rounded-md border border-ink-200 text-sm placeholder-ink-300"
           />
         </Field>
-
-        {!isWishlist ? (
-          <Field label="별점">
-            <StarRating value={rating} onChange={setRating} size="lg" />
-          </Field>
-        ) : null}
 
         <Field label={isWishlist ? '함께 갈 사람' : '함께한 사람'}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

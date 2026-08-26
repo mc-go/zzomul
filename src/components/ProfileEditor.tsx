@@ -37,8 +37,6 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
     iconKey,
     colorKey,
     photo,
-    statusMessage: '',
-    statusDate: null,
     updatedAt: '',
   };
 

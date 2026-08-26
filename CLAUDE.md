@@ -8,7 +8,7 @@
 - **HashRouter** (react-router-dom) — GitHub Pages 서브패스 대응
 - DB: **Turso (libSQL)** — `@libsql/client/web`, 브라우저에서 직접 접속
 - 근태 API: 듀얼아이 (`atdapi.duallmaster.com`) — 로그인/근태/직원 목록
-- `src/pages/` 탭 페이지 (근태 `/calendar` · 먹기록 `/lunch` · 보고 `/report` · 아무거나 `/memo` · 운세 `/fortune`)
+- `src/pages/` 탭 페이지 (근태 `/calendar` · 먹기록 `/lunch` · 지도 `/map` · 보고 `/report` · 운세 `/fortune` · 아무거나 `/memo` — 내비 순서: 근태·먹기록·지도·보고·운세·아무거나)
 - `src/lib/` DB 접근 + 도메인 로직, `src/contexts/` 전역 상태(Auth/Profiles/AppData/Anniversaries)
 
 ## 명령어
@@ -33,14 +33,16 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
 - 테이블은 각 lib 파일의 `ensureXxxSchema()`가 앱 실행 시 자동 생성 (`CREATE TABLE IF NOT EXISTS`)
 - 컬럼 추가는 같은 함수에서 `ALTER TABLE ... ADD COLUMN`을 try/catch로 실행 (중복이면 무시)
 - 주요 테이블:
-  - `profiles` — id(로그인 userId 기준) · emp_no · icon/color/photo · status_message
-  - `lunches` — 먹기록 (status: wishlist/done, meal: lunch/dinner, is_delivery, participants JSON)
+  - `users`(프로필) — id(로그인 userId 기준) · emp_no · name · icon/color/photo
+  - `daily_statuses` — 오늘의 상태메시지 (emp_no + date PK)
+  - `lunches` — 먹기록 (status: wishlist/done, meal: lunch/dinner, is_delivery, participants JSON) — rating은 레거시(입력 UI 없음, 리뷰 없는 옛 기록의 별점 표시 폴백), comment 컬럼 없음
   - `lunch_reviews` — 참여자별 평 (lunch_id + reviewer_id PK, 별점 0.5 단위)
   - `reports` — 오늘의 보고 (date + author_id UNIQUE, 하루 1건 upsert)
   - `report_comments` — 보고 댓글 (report_id + author_id UNIQUE, 1인 1댓글 upsert, 본인 보고엔 불가)
   - `anniversaries` — 기념일 (kind: birthday/hire/wedding/custom, repeat: yearly/every100days/once, remind_days JSON)
   - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note, skipped) — 캘린더에 🍽️ 뱃지, DatePanel에서 본인 것만 등록/삭제. skipped=1은 고정 약속을 그날만 쉬어가는 표시
   - `balance_votes` — 오늘의 밸런스 게임 투표 (date + voter_id PK, choice 'a'/'b') — 1인 1표 upsert. 질문 자체는 저장 안 함(날짜 시드로 결정적, `src/lib/balance.ts`)
+  - `places` — 가게 좌표 (name_key PK = normalizeRestaurant 결과, name, lat, lng) — 지도 탭 핀용. 좌표 없는 가게는 지도에서 생략
 - **매주 고정 약속**: `RECURRING_LUNCH_PLANS`(src/lib/lunch-plans.ts) — DB 저장 없이 캘린더에서 합성(`fixed: true`). 공휴일이거나 휴가 등으로 점심시간에 근무가 아니면 제외, 같은 날 직접 등록한 약속이 있으면 그쪽 우선. 예외 토글 가능: 끄면 `lunch_plans.skipped=1` 행으로 "그날만 쉬어감" 저장, 다시 켜면 행 삭제로 복구. 현재: 고민채(2023124) 금요일 "앱개발 팀 회식"
 - 캘린더 점심 구분 3종: 🍜 쪼물런치(배달이면 🛵) · 🍽️ 개인 약속 · 🍱 도시락 — 도시락은 별도 데이터 없이 "쪼물런치(점심)도 개인 약속도 없는 평일(공휴일 제외)"에 자동 표시 (도시락/약속 라벨은 날짜 상세에서만, 캘린더 그리드엔 안 보임)
 - 캘린더 하단 "도시락 리포트": 보는 달의 **사람별** 도시락/쪼물런치/약속 일수 + 절약액(1일 8,000원) — 쪼물런치·약속은 예정(미래)도 포함, 도시락만 오늘까지 지난 평일 기준. 연차(휴가)·안식휴가·오전 반차로 점심에 없던 날은 도시락에서 제외(`isAwayAtLunch` — 반차는 출근/근무예정 시작이 정오 이후면 오전 반차로 판정). 계산만, 저장 없음. 집계/약속 합성 로직은 `src/lib/lunch-stats.ts` 공용(연간 어워드 도시락왕도 같은 규칙)
@@ -51,13 +53,17 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
 - 멤버 식별: 근태 API는 **사번(empNo)**, 로그인은 **이메일/userId**. 매핑은 `src/lib/members.ts` + 프로필의 emp_no. "내 사번" = 프로필 empNo → 자동 감지(myEmpNo) 순으로 폴백.
 - 참여자 ID(`ParticipantId`) = 멤버 사번 + 퇴사자 등 추가 인물(`EXTRA_PARTICIPANTS`)
 - 기념일 반복: 입사(hire)는 100일 단위, 생일/결혼은 매년 고정. 기타(custom)만 매년/100일 단위/일회성 선택 가능. **당일 알림은 무조건 팝업**, 그 외는 remind_days 설정을 따름.
-- 첫 접속 팝업(`DailyPopup`): 오늘의 보고(남이 쓴 것) + 기념일 알림 + 오늘의 내 운세(하루 1회) + 오늘의 밸런스 게임(하루 1회, 멤버만). 본 항목은 localStorage `zzomul.daily.seen.v1`에 기록. **항목이 2종류 이상이면 상단 탭**(🎉 기념일 · 🔮 운세 · 📢 보고 · ⚖️ 밸런스)으로 구분.
+- 소식 팝업(`DailyPopup`): 오늘의 보고(남이 쓴 것) + 기념일 알림 + 오늘의 내 운세(하루 1회) + 오늘의 밸런스 게임(멤버만) + 월간 결산(매월 1~5일 1회) + 먹기록 업데이트 알림(멤버만). 접속 직후 1회 + 이후 **탭 이동·창 복귀·DB 쓰기(저장/투표 등, `db.ts`의 `DB_WRITE_EVENT`) 때 재확인**(팝업이 떠 있거나 10초 안 지났으면 건너뜀). 본 항목은 localStorage `zzomul.daily.seen.v1`에 기록 — 운세·기념일·결산은 1회만, **내 댓글을 단 보고와 투표한 밸런스는 아예 안 뜨고**, 댓글 안 단 보고·투표 안 한 밸런스·업데이트 안 한 기록은 **30분 쿨다운마다 리마인드**로 다시 뜸. 팝업은 body 포털로 렌더(헤더 backdrop-blur가 fixed 기준점을 가로채는 것 방지). **항목이 2종류 이상이면 상단 탭**(📊 결산 · 🎉 기념일 · 📢 보고 · 📝 기록 · 🔮 운세 · ⚖️ 밸런스 — 이 순서)으로 구분. 보고는 오늘 날짜만 조회하므로 전날 보고는 안 뜸.
+- **월간 결산**(`src/lib/monthly-recap.ts`): 매월 1~5일 팝업에 지난달 요약(런치/디너 횟수·주 평균·간 곳들) + 새 달 추천(위시리스트 중 안 가본 곳 우선, 계절 키워드 매칭 시 계절 사유) + 응원 한마디. 추천/응원은 월 시드로 결정적, DB 저장 없음. 지난달 기록이 없으면 생략.
+- **먹기록 업데이트 알림**: 날짜(plannedDate) 지난 위시 기록 — 점심은 당일 12시(`LUNCH_DONE_HOUR`), 저녁은 자정 지나면 팝업 📝 기록 탭으로 재촉. 참여자 지정 시 내가 낀 것만, 다녀왔어요 처리 전까지 리마인드. **내 평 리마인드**도 같은 탭 — 최근 7일(`REVIEW_REMIND_DAYS`) 내 다녀온 기록 중 내가 참여했는데 lunch_reviews에 내 평이 없는 것.
 - **밸런스 게임**(`src/lib/balance.ts`): 질문은 날짜 시드로 결정적 선택(운세와 같은 방식, 시드 유틸은 fortune.ts에서 export), 투표만 `balance_votes`에 저장. 내가 투표하기 전엔 결과 비공개, 투표 후 득표·선택자 공개, 재투표로 변경 가능. 질문 풀에서 삭제/순서 변경 금지(지난 날짜 질문이 바뀜) — 추가만. 팝업 외에 **아무거나 탭 상단**에도 상시 표시(`BalanceSection` 공용 — DailyPopup.tsx에서 export).
 - **운세**(`src/lib/fortune.ts`): 생일(anniversaries의 birthday) + 오늘 날짜를 시드로 한 결정적 생성 — DB 저장 없음, 같은 날 누가 봐도 동일. 생일 미등록 멤버는 운세 대신 등록 안내 표시.
-- **먹기록 어워드**(`src/components/LunchAwards.tsx`): 먹기록 탭 맨 위, 올해 done 기록 기준 — 최고 맛집(리뷰 평균 우선)·가장 많이 간 곳(2회 이상만)·배달왕·리뷰왕·도시락왕. 도시락왕만 올해치(1/1~오늘) 근태를 별도 1회 조회(게스트는 생략)하고 **전원 순위(🥇🥈🥉 일수·절약액)** 표시. 계산만, 저장 없음.
+- **지도 탭**(`src/pages/MapPage.tsx`): Leaflet + OpenStreetMap(API 키 불필요). 다녀온(done) 가게 중 `places`에 좌표가 있는 곳만 핀(방문 횟수 뱃지, 점심 기록 있으면 🍜·저녁만 간 곳은 🌙), 팝업에 횟수(점심/저녁 섞이면 나눠 표기)·평균 별점. 좌표 지정은 멤버만 — "칩 클릭 → 지도 클릭". **탭 진입 시 핀 없는 가게의 최신 네이버 링크를 자동 해석**(`src/lib/place-resolver.ts` — URL 좌표 파라미터 직접 파싱 + allorigins CORS 프록시 베스트에포트, 실패 링크는 세션 캐시로 재시도 안 함). 더 안정적인 일괄 처리는 `node scripts/backfill-places.mjs`. leaflet 컨테이너에 `relative z-0 isolate` 필수(내부 z-index가 헤더/모달을 덮는 것 방지).
+- **알림 종**: 헤더 설정 아이콘 왼쪽(DailyPopup이 종 버튼+팝업을 함께 렌더). 하루 최초 1회(localStorage `zzomul.daily.autoshown.v1`)는 자동 팝업, 이후엔 종 뱃지(탭 개수)만 갱신되고 소식 있으면 종이 wiggle. 클릭하면 같은 팝업.
+- **먹기록 어워드**(`src/components/LunchAwards.tsx`): 먹기록 탭 맨 위, 올해 done 기록 기준 — 상단에 🍜 쪼물런치(외식/배달 구분)·🌙 쪼물디너 횟수 칩. 어워드 6종(이 순서): 최고 맛집(**멤버 참여자 전원이 별점 남긴 기록만** 집계, 동점은 공동 1위 병기)·가장 많이 간 곳(2회 이상만)·먹부림 피크(최다 월+최다 요일 한 카드)·최장 연속 주간(먹은 날짜 기준, 기록 있는 주가 몇 주 연속인지·진행 중 표시)·리뷰왕(+😇 천사 입맛/🌶️ 깐깐 미식가 — 별점 3개 이상 남긴 사람 중 평균 최고/최저)·도시락왕. `normalizeRestaurant`는 lunch-stats.ts로 이동(LunchAwards에서 재수출). 도시락왕만 올해치(1/1~오늘) 근태를 별도 1회 조회(게스트는 생략)하고 **전원 순위(🥇🥈🥉 일수·절약액)** 표시. 계산만, 저장 없음.
 - **단골 뱃지**: 같은 가게(공백·대소문자 무시, `normalizeRestaurant`) done 기록이 2건 이상이면 날짜순 2회차부터 "🔥 단골 n회차" 표시.
 - **캘린더 위젯**(`src/components/CalendarWidgets.tsx`): 캘린더 탭 상단 그리드(모바일 2×2), 전부 "오늘" 기준이라 보는 달과 무관 — 🌡️ 사무실 온도(근무 1·반차 0.5·휴가 0, 오늘 근태만 별도 1회 조회, 주말·공휴일은 휴식 메시지) · 🎂 다가오는 기념일 D-day · 📅 다음 빨간날 · 📢 오늘 보고 현황(클릭 시 보고 탭 이동). 계산만, 저장 없음.
-- **"다녀왔어요" 한줄평/별점은 누른 사람 본인의 평(lunch_reviews)으로 저장** — `lunches.comment`에 쓰면 안 됨 (과거 이관 로직이 남의 평으로 옮기는 버그가 있었음. 이관 로직은 제거됐고 재도입 금지).
+- **별점·한줄평은 오직 lunch_reviews(참여자 개인 평)에만 저장** — 기록 자체에 별점/평을 받는 UI를 다시 만들지 말 것 (과거 lunches.comment 이관 로직이 남의 평으로 옮기는 버그가 있었고, 해당 컬럼은 삭제됨. 재도입 금지).
 - 근태 상태 코드: `1` 정상근무 · `70005` 오후반차 · `70006` 휴가 · 그 외 "기타"
 - **공휴일**: `src/lib/holidays.ts`에 수동 관리 (대체공휴일 포함). ⚠ 연말마다 다음 해 날짜 추가 필요. 캘린더에 빨간 날짜+이름으로 표시.
 

@@ -9,6 +9,11 @@ import { MEMBER_EMPNOS, type MemberEmpNo } from './members';
 // 캘린더/통계 공용 헬퍼 — 원래 CalendarPage 안에 있던 계산을
 // 먹기록 탭의 연간 어워드에서도 쓰기 위해 분리했다.
 
+// 가게명 비교용 정규화 — 공백/대소문자 차이는 같은 가게로 본다 (단골 뱃지·어워드·월간 결산 공용)
+export function normalizeRestaurant(name: string): string {
+  return name.replace(/\s+/g, '').toLowerCase();
+}
+
 // 각 먹기록이 캘린더에 얹힐 날짜로 그룹핑 (wishlist는 plannedDate, done은 date)
 export function buildLunchesByDate(lunches: Lunch[]): Record<string, Lunch[]> {
   const map: Record<string, Lunch[]> = {};

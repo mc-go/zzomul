@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import CalendarPage from './pages/CalendarPage';
 import LunchPage from './pages/LunchPage';
 import ReportPage from './pages/ReportPage';
+import MapPage from './pages/MapPage';
 import MemoPage from './pages/MemoPage';
 import FortunePage from './pages/FortunePage';
 
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/calendar" replace />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/lunch" element={<LunchPage />} />
+            <Route path="/map" element={<MapPage />} />
             <Route path="/report" element={<ReportPage />} />
             <Route path="/memo" element={<MemoPage />} />
             <Route path="/fortune" element={<FortunePage />} />

@@ -3,9 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0a0a" />
-    <!-- 프레첼 파비콘 (빌드 시 base가 /zzomul/로 자동 치환됨) -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#fdfaf3" />
+    <!-- 파비콘 = 홈 화면 아이콘과 같은 프레첼, 단 투명 배경 + 최대 크기 버전
+         (빌드 시 base가 /zzomul/로 자동 치환됨. 재생성은 scripts/make-icons.ps1) -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- 홈 화면 추가(PWA): 이름·아이콘은 manifest(안드로이드/크롬)와
+         apple-touch-icon + apple-mobile-web-app-title(아이폰)이 결정.
+         manifest 안의 경로는 manifest 위치 기준 상대 경로라 base 치환 없이도 동작 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="ZZOMUL" />
+    <meta name="application-name" content="ZZOMUL" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>쪼물랭</title>
   </head>
   <body>

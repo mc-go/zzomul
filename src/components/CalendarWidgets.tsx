@@ -94,7 +94,8 @@ export default function CalendarWidgets({ todayKey }: { todayKey: string }) {
       <Widget title="🎂 다가오는 기념일">
         {next ? (
           <>
-            <p className="text-sm font-bold text-ink-900 truncate" title={next.occ.text}>
+            {/* 좁은 카드에선 자르지 말고 단어 단위로 줄바꿈 (최대 2줄) */}
+            <p className="text-sm font-bold text-ink-900 break-keep line-clamp-2" title={next.occ.text}>
               {next.occ.emoji} {next.occ.text}
               {next.extra > 0 ? ` 외 ${next.extra}건` : ''}
             </p>
@@ -125,7 +126,7 @@ function Widget({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-ink-100 bg-white shadow-card px-3 py-2.5 min-w-0 ${className}`}
+      className={`rounded-2xl border border-ink-100 bg-white shadow-card px-2.5 sm:px-3 py-2.5 min-w-0 ${className}`}
     >
       <p className="text-[10px] font-medium text-ink-400">{title}</p>
       <div className="mt-1">{children}</div>
@@ -170,7 +171,7 @@ function TemperatureWidget({
     return (
       <Widget title="🌡️ 사무실 온도">
         <p className="text-sm font-bold text-ink-900">😴 쉬는 날</p>
-        <p className="text-[11px] text-ink-500 mt-0.5 truncate">
+        <p className="text-[11px] text-ink-500 mt-0.5 break-keep">
           {holiday ? `${holiday} — 푹 쉬어요!` : '주말 — 푹 쉬어요!'}
         </p>
       </Widget>
@@ -197,16 +198,20 @@ function TemperatureWidget({
 
   return (
     <Widget title="🌡️ 사무실 온도">
-      <p className="text-sm font-bold text-ink-900">
-        {level.emoji} {temp}°<span className="ml-1.5 text-[11px] font-medium text-ink-500">{level.message}</span>
-      </p>
+      {/* 온도와 메시지를 분리 — 좁은 카드에선 메시지가 통째로 다음 줄로 내려가게 */}
+      <div className="flex items-baseline gap-x-1.5 flex-wrap">
+        <p className="text-sm font-bold text-ink-900 whitespace-nowrap">
+          {level.emoji} {temp}°
+        </p>
+        <p className="text-[11px] font-medium text-ink-500 break-keep">{level.message}</p>
+      </div>
       <div className="mt-1.5 h-1.5 rounded-full bg-ink-50 border border-ink-100 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${level.bar}`}
           style={{ width: `${Math.max(temp, 4)}%` }}
         />
       </div>
-      <p className="text-[10px] text-ink-400 mt-1 truncate" title={away.join(' · ')}>
+      <p className="text-[10px] text-ink-400 mt-1 break-keep leading-snug" title={away.join(' · ')}>
         {away.length > 0 ? away.join(' · ') : '오늘은 다 모였어요 👏'}
       </p>
     </Widget>
@@ -234,7 +239,7 @@ function HolidayWidget({ todayKey }: { todayKey: string }) {
     <Widget title="📅 다음 빨간날">
       {next ? (
         <>
-          <p className="text-sm font-bold text-ink-900 truncate" title={next.name}>
+          <p className="text-sm font-bold text-ink-900 break-keep line-clamp-2" title={next.name}>
             ❤️ {next.name}
           </p>
           <p
@@ -280,7 +285,7 @@ function ReportWidget({
               {done.length}/{MEMBER_EMPNOS.length}명 작성
             </p>
             {done.length > 0 ? (
-              <div className="mt-1 flex items-center gap-0.5">
+              <div className="mt-1 flex items-center gap-0.5 flex-wrap">
                 {done.map((emp) => (
                   <Avatar
                     key={emp}
@@ -290,7 +295,7 @@ function ReportWidget({
                   />
                 ))}
                 {done.length === MEMBER_EMPNOS.length ? (
-                  <span className="ml-1 text-[10px] text-ink-500">다들 부지런해요 👏</span>
+                  <span className="ml-1 text-[10px] text-ink-500">다들 부지런해요 😉</span>
                 ) : null}
               </div>
             ) : (

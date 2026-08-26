@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuSettings, LuGift, LuUserRound, LuMessageSquare, LuStickyNote, LuSparkles } from 'react-icons/lu';
+import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuMap, LuSettings, LuGift, LuUserRound, LuMessageSquare, LuStickyNote, LuSparkles } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
@@ -42,9 +42,9 @@ export default function Layout() {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const todaysStatus = effectiveEmpNo ? getStatus(effectiveEmpNo, todayStr) : '';
 
-  // ProfileEditor 초기값: 오늘자 상태 메시지로 프리필
+  // ProfileEditor 초기값 (상태 메시지는 별도 StatusEditor/daily_statuses 담당)
   const editorInitial = myProfile
-    ? { ...myProfile, empNo: myProfile.empNo || myEmpNo || '', statusMessage: todaysStatus }
+    ? { ...myProfile, empNo: myProfile.empNo || myEmpNo || '' }
     : myEmpNo
       ? {
           id: profileId,
@@ -53,8 +53,6 @@ export default function Layout() {
           iconKey: 'user',
           colorKey: 'slate',
           photo: '',
-          statusMessage: todaysStatus,
-          statusDate: null,
           updatedAt: '',
         }
       : null;
@@ -90,6 +88,13 @@ export default function Layout() {
               >
                 <LuUtensils className="text-base" />
                 먹기록
+              </NavLink>
+              <NavLink
+                to="/map"
+                className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}
+              >
+                <LuMap className="text-base" />
+                지도
               </NavLink>
               <NavLink
                 to="/report"
@@ -162,6 +167,8 @@ export default function Layout() {
                 </>
               ) : null}
             </div>
+            {/* 오늘의 소식 종 — 하루 첫 소식은 자동 팝업, 이후엔 뱃지 + 클릭으로 열기 */}
+            <DailyPopup myId={effectiveEmpNo} />
             {/* 설정 메뉴 (기념일 설정 등) */}
             <div className="relative">
               <button
@@ -214,11 +221,12 @@ export default function Layout() {
       </main>
 
       <nav className="sm:hidden fixed bottom-0 inset-x-0 border-t border-ink-100 bg-white/95 backdrop-blur z-30">
-        <div className="grid grid-cols-5">
+        {/* 탭 6개 — 좁은 화면이라 라벨은 한 단계 작게 */}
+        <div className="grid grid-cols-6">
           <NavLink
             to="/calendar"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
                 isActive ? 'text-pretzel' : 'text-ink-400'
               }`
             }
@@ -229,7 +237,7 @@ export default function Layout() {
           <NavLink
             to="/lunch"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
                 isActive ? 'text-pretzel' : 'text-ink-400'
               }`
             }
@@ -238,9 +246,20 @@ export default function Layout() {
             먹기록
           </NavLink>
           <NavLink
+            to="/map"
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
+                isActive ? 'text-pretzel' : 'text-ink-400'
+              }`
+            }
+          >
+            <LuMap className="text-lg" />
+            지도
+          </NavLink>
+          <NavLink
             to="/report"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
                 isActive ? 'text-pretzel' : 'text-ink-400'
               }`
             }
@@ -251,7 +270,7 @@ export default function Layout() {
           <NavLink
             to="/fortune"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
                 isActive ? 'text-pretzel' : 'text-ink-400'
               }`
             }
@@ -262,7 +281,7 @@ export default function Layout() {
           <NavLink
             to="/memo"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${
                 isActive ? 'text-pretzel' : 'text-ink-400'
               }`
             }
@@ -317,9 +336,6 @@ export default function Layout() {
           onChanged={refreshAnniversaries}
         />
       ) : null}
-
-      {/* 접속 시 1회: 오늘의 보고 + 기념일 알림 팝업 */}
-      <DailyPopup myId={effectiveEmpNo} />
 
       {/* 배경에 구름처럼 흘러가는 선 드로잉 빵들 */}
       <FloatingBreads />

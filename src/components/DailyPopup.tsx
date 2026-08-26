@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { format } from 'date-fns';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { format, subDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuX, LuSend } from 'react-icons/lu';
+import { LuX, LuSend, LuArrowRight, LuBell } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import {
   ensureReportsSchema,
@@ -23,21 +25,41 @@ import {
   type BalanceVote,
 } from '../lib/balance';
 import { isValidParticipantId } from '../lib/members';
+import { DB_WRITE_EVENT } from '../lib/db';
+import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
+import { ensureReviewsSchema, listAllReviews } from '../lib/reviews';
+import { getMonthlyRecap, inRecapWindow, type MonthlyRecap } from '../lib/monthly-recap';
 import { ScoreStars } from '../pages/FortunePage';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { useAnniversaries } from '../contexts/AnniversariesContext';
 import Avatar from './Avatar';
 
-// 하루의 소식 팝업: 접속(새로고침) 시 1회,
-//  - 다른 사람이 쓴 오늘의 보고 (안 본 것만)
+// 하루의 소식 팝업:
+//  - 다른 사람이 쓴 오늘의 보고 (안 본 것만 — 단, 내 댓글이 없으면 쿨다운마다 다시 알림)
 //  - 기념일 알림 (당일은 무조건, 그 외엔 설정한 며칠 전)
 //  - 오늘의 내 운세 (생일 등록된 경우, 하루 1회)
-//  - 오늘의 밸런스 게임 (하루 1회, 투표는 balance_votes에 저장)
-// 본 항목은 localStorage에 기록해서 다시 안 띄움.
+//  - 오늘의 밸런스 게임 (내가 투표할 때까지 쿨다운마다 다시 알림)
+//  - 월간 결산 (매월 1~5일 1회 — 지난달 요약 + 새 달 추천/응원, src/lib/monthly-recap.ts)
+//  - 먹기록 업데이트 알림 (날짜 지난 위시 기록 — 점심은 당일 12시, 저녁은 자정 지나면.
+//    다녀왔어요 처리할 때까지 쿨다운마다 다시 알림, 멤버만)
+//  - 내 평 리마인드 (최근 7일 내 다녀온 기록 중 내가 참여했는데 평이 없는 것, 멤버만)
+// 확인 시점: 접속(새로고침) 직후 1회 + 이후엔 탭 이동·창 복귀·DB 쓰기(저장/투표 등) 때마다
+// 다시 확인 (단, 팝업이 떠 있거나 직전 확인에서 얼마 안 지났으면 건너뜀).
+// 표시 방식: 하루 최초 1회는 팝업이 자동으로 뜨고, 그 뒤로는 헤더의 종 아이콘에
+// 탭 개수 뱃지만 표시(알림 있으면 종이 흔들림) — 종을 누르면 같은 팝업이 뜬다.
+// 본 항목은 localStorage에 기록 — 완료한 항목(운세·기념일·댓글 단 보고·투표한 밸런스)은
+// 다시 안 뜨고, 미완료 항목은 기록 시각이 쿨다운을 지나면 리마인드로 다시 뜬다.
 // 항목이 2종류 이상이면 상단 탭으로 구분해서 보여줌.
 
 const SEEN_KEY = 'zzomul.daily.seen.v1';
+// 오늘 자동 팝업을 이미 띄웠는지 (yyyy-MM-dd 저장)
+const AUTO_SHOWN_KEY = 'zzomul.daily.autoshown.v1';
+
+// 미완료 항목(댓글 안 단 보고·투표 안 한 밸런스)을 다시 띄우기까지의 간격
+const REMIND_COOLDOWN_MS = 30 * 60 * 1000;
+// 재확인 최소 간격 — 탭 이동/저장이 잦아도 DB 조회를 이보다 자주 하지 않음
+const MIN_RECHECK_MS = 10 * 1000;
 
 function readSeen(): Record<string, number> {
   try {
@@ -63,6 +85,28 @@ function markSeen(keys: string[]): void {
 }
 
 const reportKey = (r: Report) => `report-${r.id}-${r.updatedAt}`;
+const recordKey = (l: Lunch) => `record-${l.id}-${l.plannedDate}`;
+const reviewKey = (l: Lunch) => `review-${l.id}`;
+
+// 내 평 리마인드 대상 기간 — 너무 오래된 기록까지 조르지 않게 최근 7일만
+const REVIEW_REMIND_DAYS = 7;
+
+// 쪼물런치는 12시에 끝나니 당일 정오부터, 디너는 밤에 끝나니 자정(다음날)부터 알림
+const LUNCH_DONE_HOUR = 12;
+
+// 날짜가 정해진 위시 기록 중 그 시간이 지나 "다녀왔어요" 업데이트가 필요한 것들
+function overduePlannedLunches(lunches: Lunch[], myId: string, now: Date): Lunch[] {
+  const todayStr = format(now, 'yyyy-MM-dd');
+  return lunches.filter((l) => {
+    if (l.status !== 'wishlist' || !l.plannedDate) return false;
+    // 참여자가 지정돼 있으면 내가 낀 기록만 (비어 있으면 전원으로 간주)
+    if (l.participants.length > 0 && !(l.participants as readonly string[]).includes(myId)) {
+      return false;
+    }
+    if (l.plannedDate < todayStr) return true;
+    return l.plannedDate === todayStr && l.meal === 'lunch' && now.getHours() >= LUNCH_DONE_HOUR;
+  });
+}
 
 // 보고에 짧은 댓글 달기 (팝업/보고 페이지 공용).
 // 사람당 댓글 1개 — 이미 쓴 댓글이 있으면 그 내용으로 프리필되고, 다시 보내면 수정됨.
@@ -160,7 +204,17 @@ export default function DailyPopup({ myId }: { myId: string }) {
   const [balance, setBalance] = useState<BalanceQuestion | null>(null);
   const [balanceVotes, setBalanceVotes] = useState<BalanceVote[]>([]);
   const [balanceKey, setBalanceKey] = useState('');
+  const [recap, setRecap] = useState<MonthlyRecap | null>(null);
+  const [recapKey, setRecapKey] = useState('');
+  const [pendingRecords, setPendingRecords] = useState<Lunch[]>([]);
+  const [reviewPending, setReviewPending] = useState<Lunch[]>([]);
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+  // 이벤트 리스너(1회 등록)에서 항상 최신 상태/클로저를 쓰기 위한 ref들
+  const openRef = useRef(open);
+  openRef.current = open;
+  const firedRef = useRef(false);
+  const lastCheckAtRef = useRef(0);
 
   useEffect(() => {
     if (fired) return;
@@ -169,21 +223,65 @@ export default function DailyPopup({ myId }: { myId: string }) {
     if (namesLoading || profilesLoading || !annivReady) return;
     const timer = setTimeout(() => {
       setFired(true);
+      firedRef.current = true;
+      lastCheckAtRef.current = Date.now();
       void check();
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fired, namesLoading, profilesLoading, annivReady, myId]);
 
+  // 최초 확인 이후의 재확인 — 팝업이 떠 있지 않고, 직전 확인에서 충분히 지났을 때만
+  function recheck() {
+    if (!firedRef.current || openRef.current) return;
+    if (Date.now() - lastCheckAtRef.current < MIN_RECHECK_MS) return;
+    lastCheckAtRef.current = Date.now();
+    void check();
+  }
+  const recheckRef = useRef(recheck);
+  recheckRef.current = recheck;
+
+  // 탭(라우트) 이동 시 재확인
+  useEffect(() => {
+    recheckRef.current();
+  }, [location.pathname]);
+
+  // 창 복귀(포커스/visible)·DB 쓰기(보고 저장, 댓글, 투표 등) 후 재확인
+  useEffect(() => {
+    const onWake = () => {
+      if (document.visibilityState !== 'visible') return;
+      recheckRef.current();
+    };
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener(DB_WRITE_EVENT, onWake);
+    return () => {
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener(DB_WRITE_EVENT, onWake);
+    };
+  }, []);
+
   async function check() {
+    if (openRef.current) return; // 이미 떠 있으면 내용을 갈아치우지 않음
     try {
       await ensureReportsSchema();
       const today = format(new Date(), 'yyyy-MM-dd');
       const todayReports = await listReportsForDate(today);
       const seen = readSeen();
-      const freshReports = todayReports.filter(
-        (r) => r.authorId !== myId && !seen[reportKey(r)],
-      );
+      const now = Date.now();
+      // 미완료 항목은 마지막으로 본 지 쿨다운이 지나면 다시 알림 대상
+      const remindable = (key: string) => !seen[key] || now - seen[key] > REMIND_COOLDOWN_MS;
+      // 오늘의 보고: 남이 쓴 것 중 — 내 댓글을 이미 단 보고는 아예 안 띄우고,
+      // 안 단 보고는 까먹지 않도록 쿨다운마다 다시
+      const othersReports = todayReports.filter((r) => r.authorId !== myId);
+      const allComments = await listCommentsForReports(othersReports.map((r) => r.id));
+      const freshReports = othersReports.filter((r) => {
+        const commented = !!myId && (allComments[r.id] ?? []).some((c) => c.authorId === myId);
+        if (commented) return false;
+        // 댓글을 달 수 없는 게스트(myId 없음)는 리마인드 없이 처음 볼 때 1회만
+        return myId ? remindable(reportKey(r)) : !seen[reportKey(r)];
+      });
       const freshNotices = noticesForToday(anniversaries, new Date(), resolveName).filter(
         (n) => !seen[n.key],
       );
@@ -193,25 +291,87 @@ export default function DailyPopup({ myId }: { myId: string }) {
         : '';
       const fKey = `fortune-${myId}-${today}`;
       const freshFortune = myBirthday && !seen[fKey] ? getFortune(myId, myBirthday, today) : null;
-      // 오늘의 밸런스 게임: 투표 가능한 멤버(사번 확인)에게만, 하루 1회
+      // 오늘의 밸런스 게임: 투표 가능한 멤버에게만 — 투표할 때까지 쿨다운마다 다시 알림
       const bKey = `balance-${myId}-${today}`;
       let freshBalance: BalanceQuestion | null = null;
       let freshVotes: BalanceVote[] = [];
-      if (isValidParticipantId(myId) && !seen[bKey]) {
+      const isMember = isValidParticipantId(myId);
+      if (isMember) {
         await ensureBalanceSchema();
-        freshBalance = getBalanceQuestion(today);
-        freshVotes = await listBalanceVotes(today);
+        const votes = await listBalanceVotes(today);
+        const voted = votes.some((v) => v.voterId === myId);
+        if (!voted && remindable(bKey)) {
+          freshBalance = getBalanceQuestion(today);
+          freshVotes = votes;
+        }
       }
-      if (freshReports.length > 0 || freshNotices.length > 0 || freshFortune || freshBalance) {
-        setReports(freshReports);
-        setComments(await listCommentsForReports(freshReports.map((r) => r.id)));
-        setNotices(freshNotices);
-        setFortune(freshFortune);
-        setFortuneKey(freshFortune ? fKey : '');
-        setBalance(freshBalance);
-        setBalanceVotes(freshVotes);
-        setBalanceKey(freshBalance ? bKey : '');
-        setOpen(true);
+      // 월간 결산(매월 1~5일 1회) + 먹기록 업데이트 알림 — 먹기록 조회가 필요할 때만
+      const rKey = `recap-${today.slice(0, 7)}`;
+      const needRecap = inRecapWindow(new Date()) && !seen[rKey];
+      let freshRecap: MonthlyRecap | null = null;
+      let freshPending: Lunch[] = [];
+      let freshReviewPending: Lunch[] = [];
+      if (needRecap || isMember) {
+        await ensureLunchesSchema();
+        const allLunches = await listLunches();
+        if (needRecap) freshRecap = getMonthlyRecap(allLunches, new Date());
+        if (isMember) {
+          freshPending = overduePlannedLunches(allLunches, myId, new Date()).filter((l) =>
+            remindable(recordKey(l)),
+          );
+          // 내 평 리마인드: 최근 N일 내 다녀온 기록 중 내가 참여했는데 평이 없는 것
+          await ensureReviewsSchema();
+          const allReviews = await listAllReviews();
+          const cutoff = format(subDays(new Date(), REVIEW_REMIND_DAYS), 'yyyy-MM-dd');
+          freshReviewPending = allLunches.filter(
+            (l) =>
+              l.status === 'done' &&
+              l.date >= cutoff &&
+              l.date <= today &&
+              (l.participants.length === 0 ||
+                (l.participants as readonly string[]).includes(myId)) &&
+              !(allReviews[l.id] ?? []).some((r) => r.reviewerId === myId) &&
+              remindable(reviewKey(l)),
+          );
+        }
+      }
+      // 상태는 항상 갱신 — 종 아이콘 뱃지가 최신 소식 개수를 보여줄 수 있게
+      setReports(freshReports);
+      setComments(allComments);
+      setNotices(freshNotices);
+      setFortune(freshFortune);
+      setFortuneKey(freshFortune ? fKey : '');
+      setBalance(freshBalance);
+      setBalanceVotes(freshVotes);
+      setBalanceKey(freshBalance ? bKey : '');
+      setRecap(freshRecap);
+      setRecapKey(freshRecap ? rKey : '');
+      setPendingRecords(freshPending);
+      setReviewPending(freshReviewPending);
+      const hasAny =
+        freshReports.length > 0 ||
+        freshNotices.length > 0 ||
+        !!freshFortune ||
+        !!freshBalance ||
+        !!freshRecap ||
+        freshPending.length > 0 ||
+        freshReviewPending.length > 0;
+      // 하루 최초 1회만 자동으로 팝업 — 이후엔 종 아이콘 뱃지로만 알림
+      if (hasAny) {
+        let autoShown = '';
+        try {
+          autoShown = localStorage.getItem(AUTO_SHOWN_KEY) ?? '';
+        } catch {
+          // localStorage 실패 시엔 그냥 자동으로 띄움
+        }
+        if (autoShown !== today) {
+          try {
+            localStorage.setItem(AUTO_SHOWN_KEY, today);
+          } catch {
+            // ignore
+          }
+          setOpen(true);
+        }
       }
     } catch {
       // 조회 실패 시 팝업만 조용히 건너뜀
@@ -238,34 +398,88 @@ export default function DailyPopup({ myId }: { myId: string }) {
       ...notices.map((n) => n.key),
       ...(fortuneKey ? [fortuneKey] : []),
       ...(balanceKey ? [balanceKey] : []),
+      ...(recapKey ? [recapKey] : []),
+      ...pendingRecords.map(recordKey),
+      ...reviewPending.map(reviewKey),
     ]);
     setOpen(false);
+    // 방금 본 것들은 전부 확인/스누즈 처리됐으니 뱃지도 비움 (리마인드는 다음 확인 때 다시)
+    setReports([]);
+    setNotices([]);
+    setFortune(null);
+    setFortuneKey('');
+    setBalance(null);
+    setBalanceVotes([]);
+    setBalanceKey('');
+    setRecap(null);
+    setRecapKey('');
+    setPendingRecords([]);
+    setReviewPending([]);
   }
 
-  if (!open) return null;
+  // 종 뱃지 숫자 = 소식이 있는 탭 개수
+  const tabCount =
+    (recap ? 1 : 0) +
+    (notices.length > 0 ? 1 : 0) +
+    (reports.length > 0 ? 1 : 0) +
+    (pendingRecords.length > 0 || reviewPending.length > 0 ? 1 : 0) +
+    (fortune ? 1 : 0) +
+    (balance ? 1 : 0);
 
   return (
-    <DailyPopupView
-      reports={reports}
-      notices={notices}
-      comments={comments}
-      fortune={fortune}
-      balance={balance}
-      balanceVotes={balanceVotes}
-      onBalanceVote={handleBalanceVote}
-      myId={myId}
-      onAddComment={myId ? handleAddComment : undefined}
-      onClose={close}
-    />
+    <>
+      {/* 헤더용 종 아이콘 — 소식이 있으면 흔들리고 탭 개수가 뱃지로 보임 */}
+      <button
+        type="button"
+        onClick={() => tabCount > 0 && setOpen(true)}
+        className={`relative inline-flex items-center text-xs px-2 py-1.5 rounded-md hover:bg-ink-50 ${
+          tabCount > 0 ? 'text-pretzel hover:text-pretzel-dark' : 'text-ink-300 cursor-default'
+        }`}
+        title={tabCount > 0 ? `오늘의 소식 ${tabCount}개` : '새 소식이 없어요'}
+        aria-label="오늘의 소식"
+      >
+        <LuBell className={`text-sm ${tabCount > 0 ? 'animate-wiggle' : ''}`} />
+        {tabCount > 0 ? (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+            {tabCount}
+          </span>
+        ) : null}
+      </button>
+
+      {/* 팝업은 body 포털로 — 종이 사는 헤더의 backdrop-blur가
+          fixed 기준점을 가로채서 팝업이 헤더 쪽에 뜨는 걸 방지 */}
+      {open
+        ? createPortal(
+            <DailyPopupView
+              reports={reports}
+              notices={notices}
+              comments={comments}
+              fortune={fortune}
+              balance={balance}
+              balanceVotes={balanceVotes}
+              onBalanceVote={handleBalanceVote}
+              recap={recap}
+              pendingRecords={pendingRecords}
+              reviewPending={reviewPending}
+              myId={myId}
+              onAddComment={myId ? handleAddComment : undefined}
+              onClose={close}
+            />,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
 // 팝업 탭 종류 — 항목이 2종류 이상일 때만 탭 바가 보임
-type PopupTab = 'anniv' | 'fortune' | 'report' | 'balance';
+type PopupTab = 'recap' | 'anniv' | 'fortune' | 'record' | 'report' | 'balance';
 
 const TAB_LABEL: Record<PopupTab, string> = {
+  recap: '📊 결산',
   anniv: '🎉 기념일',
   fortune: '🔮 운세',
+  record: '📝 기록',
   report: '📢 보고',
   balance: '⚖️ 밸런스',
 };
@@ -279,6 +493,9 @@ export function DailyPopupView({
   balance = null,
   balanceVotes = [],
   onBalanceVote,
+  recap = null,
+  pendingRecords = [],
+  reviewPending = [],
   myId = '',
   onAddComment,
   onClose,
@@ -290,6 +507,9 @@ export function DailyPopupView({
   balance?: BalanceQuestion | null;
   balanceVotes?: BalanceVote[];
   onBalanceVote?: (choice: BalanceChoice) => Promise<void>;
+  recap?: MonthlyRecap | null;
+  pendingRecords?: Lunch[];
+  reviewPending?: Lunch[];
   myId?: string;
   onAddComment?: (reportId: number, content: string) => Promise<void>;
   onClose: () => void;
@@ -299,11 +519,13 @@ export function DailyPopupView({
   const dayOf = notices.filter((n) => n.daysUntil === 0);
   const upcoming = notices.filter((n) => n.daysUntil > 0);
 
-  // 내용이 있는 탭만 순서대로 (기념일 → 운세 → 보고 → 밸런스)
+  // 내용이 있는 탭만 순서대로 (결산 → 기념일 → 보고 → 기록 → 운세 → 밸런스)
   const tabs: PopupTab[] = [
+    ...(recap ? (['recap'] as const) : []),
     ...(notices.length > 0 ? (['anniv'] as const) : []),
-    ...(fortune ? (['fortune'] as const) : []),
     ...(reports.length > 0 ? (['report'] as const) : []),
+    ...(pendingRecords.length > 0 || reviewPending.length > 0 ? (['record'] as const) : []),
+    ...(fortune ? (['fortune'] as const) : []),
     ...(balance ? (['balance'] as const) : []),
   ];
   const [active, setActive] = useState<PopupTab>(tabs[0] ?? 'report');
@@ -335,9 +557,9 @@ export function DailyPopupView({
           </p>
         </header>
 
-        {/* 소식 종류가 2개 이상이면 탭으로 구분 */}
+        {/* 소식 종류가 2개 이상이면 탭으로 구분 (많으면 줄바꿈) */}
         {tabs.length >= 2 ? (
-          <nav className="flex items-center justify-center gap-1 px-5 pb-3">
+          <nav className="flex items-center justify-center gap-1 flex-wrap px-5 pb-3">
             {tabs.map((t) => (
               <button
                 key={t}
@@ -356,6 +578,14 @@ export function DailyPopupView({
         ) : null}
 
         <div className="px-5 pb-4 space-y-4 overflow-y-auto">
+          {/* 월간 결산 (매월 1~5일 1회) */}
+          {active === 'recap' && recap ? <RecapSection recap={recap} /> : null}
+
+          {/* 먹기록 업데이트 알림 — 날짜 지난 위시 기록 + 내 평 안 남긴 기록 */}
+          {active === 'record' && (pendingRecords.length > 0 || reviewPending.length > 0) ? (
+            <RecordSection records={pendingRecords} reviewPending={reviewPending} onClose={onClose} />
+          ) : null}
+
           {/* 기념일 당일 — 크게 축하 */}
           {active === 'anniv' && dayOf.length > 0 ? (
             <ul className="space-y-2">
@@ -488,6 +718,142 @@ export function DailyPopupView({
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// 월간 결산 — 지난달 요약 + 새 달 추천 + 응원 한마디 (매월 1~5일 1회)
+function RecapSection({ recap }: { recap: MonthlyRecap }) {
+  return (
+    <div className="space-y-2">
+      <div className="rounded-2xl border border-sky-200 bg-gradient-to-b from-sky-50/80 to-white px-4 py-3">
+        <p className="text-center text-sm font-bold text-ink-900">
+          📊 {recap.monthLabel} 먹기록 결산
+        </p>
+        <p className="mt-1.5 text-center text-xs text-ink-700 break-keep">
+          🍜 쪼물런치 <b>{recap.lunchCount}번</b> · 🌙 쪼물디너 <b>{recap.dinnerCount}번</b>
+        </p>
+        <p className="mt-0.5 text-center text-[11px] text-ink-500">
+          일주일에 평균 <b className="text-ink-700">{recap.perWeek}번</b> 함께 먹었어요
+        </p>
+        {recap.places.length > 0 ? (
+          <div className="mt-2 flex flex-wrap justify-center gap-1">
+            {recap.places.map((p) => (
+              <span
+                key={p.name}
+                className="rounded-full border border-sky-100 bg-white px-2 py-0.5 text-[10px] text-ink-600 break-keep"
+              >
+                {p.name}
+                {p.count > 1 ? ` ×${p.count}` : ''}
+              </span>
+            ))}
+            {recap.morePlaces > 0 ? (
+              <span className="px-1 text-[10px] text-ink-400 self-center">
+                외 {recap.morePlaces}곳
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {recap.recommendation ? (
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-b from-emerald-50/70 to-white px-4 py-3 text-center">
+          <p className="text-[11px] font-semibold text-emerald-700">
+            🧭 {recap.newMonthLabel}엔 여기 어때요?
+          </p>
+          <p className="mt-1 text-sm font-bold text-ink-900 break-keep">
+            {recap.recommendation.restaurant}
+            {recap.recommendation.menu ? (
+              <span className="ml-1 text-xs font-medium text-ink-500">
+                {recap.recommendation.menu}
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-[11px] text-ink-500 break-keep">{recap.recommendation.reason}</p>
+        </div>
+      ) : recap.wishlistEmpty ? (
+        <p className="text-center text-[11px] text-ink-400 break-keep">
+          가고 싶은 곳을 위시리스트에 담아두면 다음 결산 때 추천해 드려요 📌
+        </p>
+      ) : null}
+      <p className="text-center text-xs text-pretzel font-semibold break-keep">🥨 {recap.cheer}</p>
+    </div>
+  );
+}
+
+// 먹기록 업데이트 알림 — 날짜가 지난 위시 기록의 "다녀왔어요" + 내 평 안 남긴 기록 재촉
+function RecordSection({
+  records,
+  reviewPending = [],
+  onClose,
+}: {
+  records: Lunch[];
+  reviewPending?: Lunch[];
+  onClose: () => void;
+}) {
+  return (
+    <div>
+      {records.length > 0 ? (
+        <>
+          <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">
+            📝 다녀온 기록, 업데이트해 주세요!
+          </h3>
+          <ul className="space-y-1.5">
+            {records.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center gap-2 rounded-xl border border-lime-200 bg-lime-50/50 px-3 py-2"
+              >
+                <span className="text-lg shrink-0">
+                  {l.meal === 'dinner' ? '🌙' : l.delivery ? '🛵' : '🍜'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-ink-800 break-keep">{l.restaurant}</p>
+                  <p className="text-[10px] text-ink-500">
+                    {l.plannedDate
+                      ? format(new Date(`${l.plannedDate}T00:00:00`), 'M/d (EEE)', { locale: ko })
+                      : ''}{' '}
+                    {l.meal === 'dinner' ? '저녁' : '점심'} 약속이었어요
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {reviewPending.length > 0 ? (
+        <div className={records.length > 0 ? 'mt-3' : ''}>
+          <h3 className="text-[11px] font-semibold text-ink-500 mb-1.5">
+            ⭐ 내 평이 아직 없는 기록이에요
+          </h3>
+          <ul className="space-y-1.5">
+            {reviewPending.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/50 px-3 py-2"
+              >
+                <span className="text-lg shrink-0">
+                  {l.meal === 'dinner' ? '🌙' : l.delivery ? '🛵' : '🍜'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-ink-800 break-keep">{l.restaurant}</p>
+                  <p className="text-[10px] text-ink-500">
+                    {format(new Date(`${l.date}T00:00:00`), 'M/d (EEE)', { locale: ko })} 다녀옴 —
+                    별점과 한마디 부탁해요 ✍️
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <Link
+        to="/lunch"
+        onClick={onClose}
+        className="mt-2 flex items-center justify-center gap-1 h-9 rounded-full border border-pretzel/40 bg-pretzel/5 text-xs font-semibold text-pretzel hover:bg-pretzel/10"
+      >
+        먹기록 탭에서 업데이트하기
+        <LuArrowRight className="text-sm" />
+      </Link>
     </div>
   );
 }

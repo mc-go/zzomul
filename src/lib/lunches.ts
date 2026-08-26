@@ -11,7 +11,6 @@ export type LunchInput = {
   restaurant: string;
   menu: string;
   rating: number;
-  comment: string;
   link: string;
   plannedDate: string | null;
   delivery: boolean; // 배달로 먹는 기록 (매장 방문과 구분)
@@ -27,7 +26,6 @@ export type Lunch = {
   restaurant: string;
   menu: string;
   rating: number;
-  comment: string;
   link: string;
   plannedDate: string | null;
   delivery: boolean;
@@ -36,12 +34,9 @@ export type Lunch = {
   createdAt: string;
 };
 
-// 한줄평은 여기서 받지 않음 — 작성자 본인의 평(lunch_reviews)으로 따로 저장해야 함.
-// (lunches.comment에 쓰면 예전 이관 로직처럼 작성자가 뒤바뀌는 사고가 남)
 export type PromoteInput = {
   id: number;
   date: string;
-  rating: number;
   participants: ParticipantId[];
 };
 
@@ -56,7 +51,6 @@ export async function ensureSchema(): Promise<void> {
       restaurant TEXT NOT NULL,
       menu TEXT NOT NULL DEFAULT '',
       rating INTEGER NOT NULL DEFAULT 0,
-      comment TEXT NOT NULL DEFAULT '',
       planned_date TEXT,
       link TEXT NOT NULL DEFAULT '',
       participants TEXT NOT NULL DEFAULT '[]',
@@ -96,7 +90,7 @@ function parseParticipants(raw: unknown): ParticipantId[] {
 export async function listLunches(): Promise<Lunch[]> {
   const db = getDb();
   const res = await db.execute(
-    `SELECT id, date, meal, status, restaurant, menu, rating, comment,
+    `SELECT id, date, meal, status, restaurant, menu, rating,
             link, planned_date, is_delivery, participants, created_by, created_at
      FROM lunches ORDER BY date DESC, id DESC`,
   );
@@ -108,7 +102,6 @@ export async function listLunches(): Promise<Lunch[]> {
     restaurant: String(row.restaurant),
     menu: String(row.menu ?? ''),
     rating: Number(row.rating ?? 0),
-    comment: String(row.comment ?? ''),
     link: String(row.link ?? ''),
     plannedDate: row.planned_date ? String(row.planned_date) : null,
     delivery: Number(row.is_delivery ?? 0) === 1,
@@ -125,9 +118,9 @@ export async function createLunch(input: LunchInput): Promise<void> {
   );
   await db.execute({
     sql: `INSERT INTO lunches
-            (date, meal, status, restaurant, menu, rating, comment,
+            (date, meal, status, restaurant, menu, rating,
              link, planned_date, is_delivery, participants, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       input.date,
       input.meal,
@@ -135,7 +128,6 @@ export async function createLunch(input: LunchInput): Promise<void> {
       input.restaurant,
       input.menu,
       Math.max(0, Math.min(5, Math.round(input.rating * 2) / 2)),
-      input.comment,
       input.link,
       input.plannedDate ?? null,
       input.delivery ? 1 : 0,
@@ -152,7 +144,6 @@ export type UpdateLunchInput = {
   restaurant: string;
   menu: string;
   rating: number;
-  comment: string;
   link: string;
   plannedDate: string | null;
   delivery: boolean;
@@ -166,7 +157,7 @@ export async function updateLunch(input: UpdateLunchInput): Promise<void> {
   );
   await db.execute({
     sql: `UPDATE lunches
-          SET date = ?, meal = ?, restaurant = ?, menu = ?, rating = ?, comment = ?,
+          SET date = ?, meal = ?, restaurant = ?, menu = ?, rating = ?,
               link = ?, planned_date = ?, is_delivery = ?, participants = ?
           WHERE id = ?`,
     args: [
@@ -175,7 +166,6 @@ export async function updateLunch(input: UpdateLunchInput): Promise<void> {
       input.restaurant,
       input.menu,
       Math.max(0, Math.min(5, Math.round(input.rating * 2) / 2)),
-      input.comment,
       input.link,
       input.plannedDate ?? null,
       input.delivery ? 1 : 0,
@@ -194,16 +184,10 @@ export async function promoteLunch(input: PromoteInput): Promise<void> {
     sql: `UPDATE lunches
           SET status = 'done',
               date = ?,
-              rating = ?,
               participants = ?,
               planned_date = NULL
           WHERE id = ?`,
-    args: [
-      input.date,
-      Math.max(0, Math.min(5, Math.round(input.rating * 2) / 2)),
-      JSON.stringify(participants),
-      input.id,
-    ],
+    args: [input.date, JSON.stringify(participants), input.id],
   });
 }
 

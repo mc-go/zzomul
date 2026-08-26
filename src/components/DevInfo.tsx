@@ -6,6 +6,8 @@ import { MEMBER_EMPNOS } from '../lib/members';
 import { getFortune } from '../lib/fortune';
 import { getBalanceQuestion, type BalanceVote } from '../lib/balance';
 import type { ReportComment } from '../lib/reports';
+import type { Lunch } from '../lib/lunches';
+import type { MonthlyRecap } from '../lib/monthly-recap';
 
 // 팝업 미리보기용 샘플 데이터 (실제 저장 안 됨)
 function sampleReports() {
@@ -40,6 +42,51 @@ function sampleNotices() {
       text: '쪼물랭 2주년',
       daysUntil: 7,
       date: today,
+    },
+  ];
+}
+
+// 월간 결산 탭 미리보기용 샘플
+const SAMPLE_RECAP: MonthlyRecap = {
+  monthLabel: '8월',
+  newMonthLabel: '9월',
+  lunchCount: 9,
+  dinnerCount: 2,
+  total: 11,
+  perWeek: 2.5,
+  places: [
+    { name: '김밥천국', count: 3 },
+    { name: '스시로', count: 2 },
+    { name: '연남토마', count: 1 },
+  ],
+  morePlaces: 2,
+  recommendation: {
+    restaurant: '평양면옥',
+    menu: '물냉면',
+    reason: '더위를 날려줄 여름 메뉴라 골랐어요 🧊',
+  },
+  wishlistEmpty: false,
+  cheer: '이번 달도 든든하게 먹고 힘내요! 💪',
+};
+
+// 먹기록 업데이트 알림 탭 미리보기용 샘플
+function samplePendingRecords(): Lunch[] {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  return [
+    {
+      id: -5,
+      date: today,
+      meal: 'lunch',
+      status: 'wishlist',
+      restaurant: '연남토마 본점',
+      menu: '토마토 카레',
+      rating: 0,
+      link: '',
+      plannedDate: today,
+      delivery: false,
+      participants: [],
+      createdBy: '',
+      createdAt: '',
     },
   ];
 }
@@ -150,6 +197,7 @@ export default function DevInfo() {
                   <li>· Tailwind CSS 3</li>
                   <li>· HashRouter (react-router-dom)</li>
                   <li>· @libsql/client (Turso)</li>
+                  <li>· Leaflet + OpenStreetMap (지도 탭)</li>
                   <li>· date-fns, react-icons</li>
                 </ul>
               </Section>
@@ -188,12 +236,13 @@ export default function DevInfo() {
               <Section title="주요 스키마">
                 <ul className="space-y-1 text-ink-600">
                   <li>
-                    <Code>profiles</Code>: id(userId) · emp_no · email · icon_key · color_key · photo
-                    · status_message · status_date
+                    <Code>users</Code>: id(userId) · emp_no · name · icon_key · color_key · photo
+                    — 상태메시지는 <Code>daily_statuses</Code>(emp_no+date PK)
                   </li>
                   <li>
                     <Code>lunches</Code>: date · meal(lunch/dinner) · status(wishlist/done) ·
-                    restaurant · rating · link · is_delivery · participants(JSON)
+                    restaurant · link · is_delivery · participants(JSON) — 별점/평은{' '}
+                    <Code>lunch_reviews</Code>에만
                   </li>
                   <li>
                     <Code>lunch_reviews</Code>: lunch_id + reviewer_id(PK) · rating(0.5 단위) ·
@@ -217,6 +266,10 @@ export default function DevInfo() {
                   <li>
                     <Code>balance_votes</Code>: date + voter_id(PK) · choice — 오늘의 밸런스 게임
                     1인 1표
+                  </li>
+                  <li>
+                    <Code>places</Code>: name_key(PK) · name · lat/lng — 지도 탭 핀 좌표 (좌표
+                    없는 가게는 생략)
                   </li>
                 </ul>
                 <p className="mt-1 text-[11px] text-ink-400">
@@ -294,6 +347,8 @@ function PreviewPopup({ onClose }: { onClose: () => void }) {
       fortune={getFortune(previewMe, '1999-10-19', today)}
       balance={getBalanceQuestion(today)}
       balanceVotes={votes}
+      recap={SAMPLE_RECAP}
+      pendingRecords={samplePendingRecords()}
       onBalanceVote={async (choice) => {
         setVotes((prev) => [
           ...prev.filter((v) => v.voterId !== previewMe),
