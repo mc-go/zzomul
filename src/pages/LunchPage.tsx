@@ -396,9 +396,10 @@ function WishlistSection({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 mb-1.5">
+                  {/* 좁은 화면에선 칩이 잘리지 않고 통째로 다음 줄로 내려가게 */}
+                  <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1 mb-1.5">
                     <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border whitespace-nowrap ${
                         item.meal === 'lunch'
                           ? 'bg-amber-50 text-amber-700 border-amber-100'
                           : 'bg-accent-soft text-accent border-accent/20'
@@ -408,7 +409,7 @@ function WishlistSection({
                     </span>
                     {item.delivery ? <DeliveryChip /> : null}
                     {item.plannedDate ? (
-                      <span className="text-[11px] text-ink-500">
+                      <span className="text-[11px] text-ink-500 whitespace-nowrap">
                         예정 · {format(new Date(item.plannedDate), 'M월 d일 (EEE)', { locale: ko })}
                       </span>
                     ) : null}
@@ -569,23 +570,26 @@ function DoneSection({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[11px] text-ink-400 font-medium">
+                    {/* 좁은 화면에선 칩이 잘리지 않고 통째로 다음 줄로 내려가게 */}
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1">
+                      <span className="text-[11px] text-ink-400 font-medium whitespace-nowrap">
                         {format(new Date(lunch.date), 'M월 d일 (EEE)', { locale: ko })}
                       </span>
                       {lunch.delivery ? <DeliveryChip /> : null}
                       {visitOrdinals[lunch.id] ? (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-100">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-100 whitespace-nowrap">
                           🔥 단골 {visitOrdinals[lunch.id]}회차
                         </span>
                       ) : null}
                       {/* 리뷰가 있으면 평균, 없으면 기존 단일 별점 */}
-                      <StarRating value={avg ?? lunch.rating} size="sm" readOnly />
-                      {avg != null ? (
-                        <span className="text-[11px] text-ink-500 font-medium">
-                          평균 {avg.toFixed(1)} · 평 {revs.length}개
-                        </span>
-                      ) : null}
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                        <StarRating value={avg ?? lunch.rating} size="sm" readOnly />
+                        {avg != null ? (
+                          <span className="text-[11px] text-ink-500 font-medium">
+                            평균 {avg.toFixed(1)} · 평 {revs.length}개
+                          </span>
+                        ) : null}
+                      </span>
                     </div>
                     <RestaurantTitle name={lunch.restaurant} link={lunch.link} />
                     {lunch.menu ? (
@@ -801,7 +805,7 @@ function CreatorLine({
 // 배달 기록 표시 칩 (텍스트로 "(배달)" 적는 대신 체크로 구분)
 function DeliveryChip() {
   return (
-    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-100">
+    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-100 whitespace-nowrap">
       🛵 배달
     </span>
   );
@@ -810,7 +814,7 @@ function DeliveryChip() {
 function RestaurantTitle({ name, link }: { name: string; link: string }) {
   if (link && /^https?:\/\//i.test(link)) {
     return (
-      <h3 className="text-base font-semibold text-ink-900 leading-snug">
+      <h3 className="text-base font-semibold text-ink-900 leading-snug break-keep">
         <a
           href={link}
           target="_blank"
@@ -823,7 +827,7 @@ function RestaurantTitle({ name, link }: { name: string; link: string }) {
       </h3>
     );
   }
-  return <h3 className="text-base font-semibold text-ink-900 leading-snug">{name}</h3>;
+  return <h3 className="text-base font-semibold text-ink-900 leading-snug break-keep">{name}</h3>;
 }
 
 // -----------------
