@@ -1,6 +1,7 @@
-import { useRef, useState, type FormEvent, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from 'react';
 import { LuUpload, LuX } from 'react-icons/lu';
 import Avatar from './Avatar';
+import { MBTI_TYPES, ensureSettingsSchema, getSetting, mbtiKey, setSetting } from '../lib/settings';
 import {
   AVATAR_COLORS,
   AVATAR_ICON_KEYS,
@@ -29,6 +30,25 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // MBTI — settings(mbti.{사번})에 따로 저장, 운세 카드에 뱃지로 표시
+  const empNo = initial?.empNo ?? '';
+  const [mbti, setMbti] = useState('');
+
+  useEffect(() => {
+    if (!empNo) return;
+    let cancelled = false;
+    ensureSettingsSchema()
+      .then(() => getSetting(mbtiKey(empNo)))
+      .then((v) => {
+        if (!cancelled && v) setMbti(v);
+      })
+      .catch(() => {
+        /* 로드 실패해도 새로 선택해서 저장 가능 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [empNo]);
 
   const previewProfile: Profile = {
     id: profileId,
@@ -58,6 +78,10 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
     setBusy(true);
     setErr(null);
     try {
+      if (empNo) {
+        await ensureSettingsSchema();
+        await setSetting(mbtiKey(empNo), mbti);
+      }
       await onSubmit({
         iconKey,
         colorKey,
@@ -182,6 +206,30 @@ export default function ProfileEditor({ profileId, displayName, initial, onClose
               })}
             </div>
           </FieldBlock>
+
+          {empNo ? (
+            <FieldBlock label="MBTI (선택)" hint="운세 카드에 표시돼요 · 다시 누르면 해제">
+              <div className="grid grid-cols-4 gap-1.5">
+                {MBTI_TYPES.map((t) => {
+                  const active = mbti === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setMbti(active ? '' : t)}
+                      className={`h-8 rounded-md border text-[11px] font-semibold tracking-wide transition-colors ${
+                        active
+                          ? 'bg-ink-900 text-white border-ink-900'
+                          : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            </FieldBlock>
+          ) : null}
 
           {err ? (
             <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">

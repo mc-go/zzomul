@@ -346,8 +346,8 @@ function LunchPlanSection({
                 size="xs"
                 fallbackText={resolveName(p.empNo)}
               />
-              <span className="font-medium">{resolveName(p.empNo)}</span>
-              <span className="text-ink-500 min-w-0 truncate">
+              <span className="font-medium shrink-0">{resolveName(p.empNo)}</span>
+              <span className="text-ink-500 min-w-0 flex-1 break-keep">
                 {p.note ? p.note : '따로 약속 있어요'}
               </span>
               {p.fixed ? (

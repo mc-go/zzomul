@@ -85,14 +85,9 @@ export async function ensureBalanceSchema(): Promise<void> {
   `);
 }
 
-export async function listBalanceVotes(date: string): Promise<BalanceVote[]> {
-  const db = getDb();
-  const res = await db.execute({
-    sql: `SELECT date, voter_id, choice, updated_at FROM balance_votes WHERE date = ?`,
-    args: [date],
-  });
+function rowsToVotes(rows: Record<string, unknown>[]): BalanceVote[] {
   const out: BalanceVote[] = [];
-  for (const row of res.rows) {
+  for (const row of rows) {
     const voterId = String(row.voter_id ?? '');
     const choice = String(row.choice ?? '');
     if (!isValidParticipantId(voterId)) continue;
@@ -105,6 +100,25 @@ export async function listBalanceVotes(date: string): Promise<BalanceVote[]> {
     });
   }
   return out;
+}
+
+export async function listBalanceVotes(date: string): Promise<BalanceVote[]> {
+  const db = getDb();
+  const res = await db.execute({
+    sql: `SELECT date, voter_id, choice, updated_at FROM balance_votes WHERE date = ?`,
+    args: [date],
+  });
+  return rowsToVotes(res.rows as Record<string, unknown>[]);
+}
+
+// 한 달치 투표 (빙고의 만장일치/참여 판정용)
+export async function listBalanceVotesForMonth(month: string): Promise<BalanceVote[]> {
+  const db = getDb();
+  const res = await db.execute({
+    sql: `SELECT date, voter_id, choice, updated_at FROM balance_votes WHERE date LIKE ?`,
+    args: [`${month}-%`],
+  });
+  return rowsToVotes(res.rows as Record<string, unknown>[]);
 }
 
 // 1인 1표 — 다시 투표하면 선택만 바뀜

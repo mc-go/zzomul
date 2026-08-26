@@ -169,7 +169,9 @@ export default function AnniversaryManager({
                 >
                   <span className="text-lg">{emojiFor(item)}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-ink-800 truncate">{itemTitle(item)}</p>
+                    <p className="text-xs font-medium text-ink-800 break-keep line-clamp-2">
+                      {itemTitle(item)}
+                    </p>
                     <p className="text-[10px] text-ink-400">
                       {format(new Date(item.date), 'yyyy년 M월 d일', { locale: ko })}
                       {item.kind === 'hire'

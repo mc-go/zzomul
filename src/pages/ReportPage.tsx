@@ -150,13 +150,13 @@ export default function ReportPage() {
 
       {/* 오늘의 보고 작성 카드 */}
       <section className="rounded-2xl border-2 border-amber-200 bg-gradient-to-b from-amber-50 to-white p-4 sm:p-5 mb-8">
-        <header className="flex items-center gap-2 mb-3">
+        <header className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3">
           <GiPretzel className="text-xl text-pretzel animate-wiggle" />
-          <h2 className="text-sm font-semibold text-ink-900">
+          <h2 className="text-sm font-semibold text-ink-900 whitespace-nowrap">
             오늘의 보고 <span className="text-ink-400 font-normal">· {format(new Date(), 'M월 d일 (EEE)', { locale: ko })}</span>
           </h2>
           {myToday ? (
-            <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+            <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
               <LuPencil className="text-[10px]" />
               작성 완료 · 다시 저장하면 수정돼요
             </span>

@@ -378,9 +378,12 @@ export default function LunchAwards({
           {/* 올해 함께 먹은 횟수 — 좁은 화면에선 줄바꿈되는 칩 */}
           {counts.lunch + counts.dinner > 0 ? (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              <span className="inline-flex items-baseline gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] text-ink-700 whitespace-nowrap">
-                🍜 쪼물런치 <b className="text-ink-900">{counts.lunch}번</b>
-                <span className="text-ink-400">
+              {/* 초소형 화면에서 칩이 컨테이너보다 길어지면 괄호 부분만 다음 줄로 */}
+              <span className="inline-flex items-baseline flex-wrap gap-x-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] text-ink-700">
+                <span className="whitespace-nowrap">
+                  🍜 쪼물런치 <b className="text-ink-900">{counts.lunch}번</b>
+                </span>
+                <span className="text-ink-400 whitespace-nowrap">
                   (외식 {counts.lunchOut} · 배달 {counts.lunchDelivery})
                 </span>
               </span>

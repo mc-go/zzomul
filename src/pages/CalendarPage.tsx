@@ -57,6 +57,7 @@ import { useAppData } from '../contexts/AppDataContext';
 import Avatar from '../components/Avatar';
 import MemberProfileModal from '../components/MemberProfileModal';
 import DatePanel from '../components/DatePanel';
+import { SavingsGauge, useSavingsChallenge } from '../components/SavingsChallenge';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금'];
 
@@ -76,6 +77,8 @@ export default function CalendarPage() {
   // "오늘" 기준일 — 탭을 며칠 켜둬도 복귀 시 갱신되도록 state로 관리
   // (도시락 리포트의 "오늘까지" 판정과 캘린더 오늘 하이라이트가 이 값을 씀)
   const [todayKey, setTodayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  // 절약 챌린지 — 도시락 리포트 멤버 줄의 연간 목표 게이지용
+  const savings = useSavingsChallenge(calendarLunches, lunchPlans, todayKey);
 
   useEffect(() => {
     // 탭 복귀(visibilitychange)·창 포커스 시 날짜가 넘어갔으면 갱신.
@@ -574,19 +577,24 @@ export default function CalendarPage() {
                   <span className="px-1.5 py-0.5 rounded-full border bg-white text-teal-700 border-teal-200 font-medium">
                     🍽️ {s.plan}일
                   </span>
-                  {s.dosirak > 0 ? (
-                    <span className="sm:ml-auto font-semibold text-lime-700">
-                      💰 약 {(s.dosirak * 8000).toLocaleString()}원 절약!
-                    </span>
-                  ) : null}
+                  {/* 이달 절약액 + 오른쪽에 연간 절약 챌린지 게이지 (목표 설정한 사람만) */}
+                  <span className="sm:ml-auto inline-flex items-center gap-2 flex-wrap">
+                    {s.dosirak > 0 ? (
+                      <span className="font-semibold text-lime-700 whitespace-nowrap">
+                        💰 약 {(s.dosirak * 8000).toLocaleString()}원 절약!
+                      </span>
+                    ) : null}
+                    <SavingsGauge challenge={savings} empNo={emp} />
+                  </span>
                 </li>
               );
             })}
           </ul>
-          <p className="mt-2 text-[10px] text-ink-400">
+          <p className="mt-2 text-[10px] text-ink-400 break-keep">
             🍜·🍽️는 예정 포함, 🍱는 오늘까지 지난 평일({dosirakStats.counted}일) 기준이고
             연차·오전 반차로 점심에 없던 날은 빼요 · 도시락 하루 = 외식 한 끼 8,000원 절약으로
-            계산했어요
+            계산했어요 · 오른쪽 게이지는 {savings.year}년 절약 챌린지(2026년은 8월부터 집계)
+            진행률 — 목표는 ⚙️ 설정에서 지정해요
           </p>
         </section>
       ) : null}

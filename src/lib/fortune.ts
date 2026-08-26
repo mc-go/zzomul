@@ -1,6 +1,7 @@
-// 오늘의 운세: 생일 + 날짜를 시드로 한 결정적(deterministic) 생성.
+// 오늘의 운세: 생일(띠·별자리) + MBTI + 날짜를 시드로 한 결정적(deterministic) 생성.
 // 같은 사람·같은 날이면 누가 언제 봐도 같은 운세가 나옴 (DB 저장 불필요).
-// 생일은 anniversaries 테이블의 kind='birthday' 항목에서 가져옴.
+// 생일은 anniversaries의 kind='birthday', MBTI는 settings의 mbti.{사번}에서 가져옴.
+// MBTI를 바꾸면 그날 운세도 바뀜 (시드에 포함되므로).
 
 export type Fortune = {
   score: number; // 1~5 (오늘의 운세 지수)
@@ -178,18 +179,23 @@ function pick<T>(rand: () => number, pool: T[]): T {
   return pool[Math.floor(rand() * pool.length)];
 }
 
-// birthDate: 'yyyy-MM-dd', date: 오늘 'yyyy-MM-dd'
-export function getFortune(empNo: string, birthDate: string, date: string): Fortune {
-  const rand = mulberry32(hashSeed(`zzomul-fortune|${empNo}|${birthDate}|${date}`));
-
-  // 점수는 3~5가 잘 나오게 가중치 (기분 좋은 앱이니까 1점은 드물게)
-  const roll = rand();
-  const score = roll < 0.05 ? 1 : roll < 0.15 ? 2 : roll < 0.45 ? 3 : roll < 0.8 ? 4 : 5;
-
+// birthDate: 'yyyy-MM-dd', date: 오늘 'yyyy-MM-dd', mbti: 미설정이면 ''
+export function getFortune(empNo: string, birthDate: string, date: string, mbti = ''): Fortune {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate);
   const year = m ? Number(m[1]) : 2000;
   const month = m ? Number(m[2]) : 1;
   const day = m ? Number(m[3]) : 1;
+  const zodiac = zodiacFor(month, day);
+  const animal = ANIMALS[((year % 12) + 12) % 12];
+
+  // 띠·별자리·MBTI가 모두 시드에 들어가서 각각이 운세에 반영됨
+  const rand = mulberry32(
+    hashSeed(`zzomul-fortune|${empNo}|${zodiac.name}|${animal.name}|${mbti}|${date}`),
+  );
+
+  // 점수는 3~5가 잘 나오게 가중치 (기분 좋은 앱이니까 1점은 드물게)
+  const roll = rand();
+  const score = roll < 0.05 ? 1 : roll < 0.15 ? 2 : roll < 0.45 ? 3 : roll < 0.8 ? 4 : 5;
 
   return {
     score,
@@ -199,7 +205,7 @@ export function getFortune(empNo: string, birthDate: string, date: string): Fort
     avoidToday: pick(rand, AVOID_TODAY),
     luckyItem: pick(rand, LUCKY_ITEMS),
     luckyColor: pick(rand, LUCKY_COLORS),
-    zodiac: zodiacFor(month, day),
-    animal: ANIMALS[((year % 12) + 12) % 12],
+    zodiac,
+    animal,
   };
 }

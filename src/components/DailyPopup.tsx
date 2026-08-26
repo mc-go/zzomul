@@ -28,7 +28,15 @@ import { isValidParticipantId } from '../lib/members';
 import { DB_WRITE_EVENT } from '../lib/db';
 import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
 import { ensureReviewsSchema, listAllReviews } from '../lib/reviews';
-import { getMonthlyRecap, inRecapWindow, type MonthlyRecap } from '../lib/monthly-recap';
+import { ensureSettingsSchema, getSetting, mbtiKey } from '../lib/settings';
+import {
+  getMonthlyRecap,
+  getYearlyRecap,
+  inRecapWindow,
+  isYearEndSeason,
+  type MonthlyRecap,
+  type YearlyRecap,
+} from '../lib/monthly-recap';
 import { ScoreStars } from '../pages/FortunePage';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
@@ -41,6 +49,7 @@ import Avatar from './Avatar';
 //  - 오늘의 내 운세 (생일 등록된 경우, 하루 1회)
 //  - 오늘의 밸런스 게임 (내가 투표할 때까지 쿨다운마다 다시 알림)
 //  - 월간 결산 (매월 1~5일 1회 — 지난달 요약 + 새 달 추천/응원, src/lib/monthly-recap.ts)
+//  - 연말 리캡·맛집 월드컵 알림 (연말 시즌 = 12월 마지막 주 한 주 전부터, 각 1회)
 //  - 먹기록 업데이트 알림 (날짜 지난 위시 기록 — 점심은 당일 12시, 저녁은 자정 지나면.
 //    다녀왔어요 처리할 때까지 쿨다운마다 다시 알림, 멤버만)
 //  - 내 평 리마인드 (최근 7일 내 다녀온 기록 중 내가 참여했는데 평이 없는 것, 멤버만)
@@ -206,6 +215,10 @@ export default function DailyPopup({ myId }: { myId: string }) {
   const [balanceKey, setBalanceKey] = useState('');
   const [recap, setRecap] = useState<MonthlyRecap | null>(null);
   const [recapKey, setRecapKey] = useState('');
+  const [yearly, setYearly] = useState<YearlyRecap | null>(null);
+  const [yearlyKey, setYearlyKey] = useState('');
+  const [worldcup, setWorldcup] = useState(false);
+  const [worldcupKey, setWorldcupKey] = useState('');
   const [pendingRecords, setPendingRecords] = useState<Lunch[]>([]);
   const [reviewPending, setReviewPending] = useState<Lunch[]>([]);
   const [open, setOpen] = useState(false);
@@ -290,7 +303,14 @@ export default function DailyPopup({ myId }: { myId: string }) {
         ? anniversaries.find((a) => a.kind === 'birthday' && a.ownerId === myId)?.date ?? ''
         : '';
       const fKey = `fortune-${myId}-${today}`;
-      const freshFortune = myBirthday && !seen[fKey] ? getFortune(myId, myBirthday, today) : null;
+      let freshFortune: Fortune | null = null;
+      if (myBirthday && !seen[fKey]) {
+        // MBTI가 시드에 들어가므로 운세 탭과 같은 값을 넘겨야 팝업과 탭의 운세가 일치함
+        const myMbti = await ensureSettingsSchema()
+          .then(() => getSetting(mbtiKey(myId)))
+          .catch(() => null);
+        freshFortune = getFortune(myId, myBirthday, today, myMbti ?? '');
+      }
       // 오늘의 밸런스 게임: 투표 가능한 멤버에게만 — 투표할 때까지 쿨다운마다 다시 알림
       const bKey = `balance-${myId}-${today}`;
       let freshBalance: BalanceQuestion | null = null;
@@ -308,6 +328,13 @@ export default function DailyPopup({ myId }: { myId: string }) {
       // 월간 결산(매월 1~5일 1회) + 먹기록 업데이트 알림 — 먹기록 조회가 필요할 때만
       const rKey = `recap-${today.slice(0, 7)}`;
       const needRecap = inRecapWindow(new Date()) && !seen[rKey];
+      // 연말 시즌: 연간 리캡 + 맛집 월드컵 알림 (각각 시즌 중 1회, 멤버만)
+      const year = today.slice(0, 4);
+      const yKey = `recap-year-${year}`;
+      const wKey = `worldcup-${year}`;
+      const yearEnd = isYearEndSeason(new Date());
+      let freshYearly: YearlyRecap | null = null;
+      const freshWorldcup = yearEnd && isMember && !seen[wKey];
       let freshRecap: MonthlyRecap | null = null;
       let freshPending: Lunch[] = [];
       let freshReviewPending: Lunch[] = [];
@@ -333,6 +360,9 @@ export default function DailyPopup({ myId }: { myId: string }) {
               !(allReviews[l.id] ?? []).some((r) => r.reviewerId === myId) &&
               remindable(reviewKey(l)),
           );
+          if (yearEnd && !seen[yKey]) {
+            freshYearly = getYearlyRecap(allLunches, allReviews, new Date());
+          }
         }
       }
       // 상태는 항상 갱신 — 종 아이콘 뱃지가 최신 소식 개수를 보여줄 수 있게
@@ -348,12 +378,18 @@ export default function DailyPopup({ myId }: { myId: string }) {
       setRecapKey(freshRecap ? rKey : '');
       setPendingRecords(freshPending);
       setReviewPending(freshReviewPending);
+      setYearly(freshYearly);
+      setYearlyKey(freshYearly ? yKey : '');
+      setWorldcup(freshWorldcup);
+      setWorldcupKey(freshWorldcup ? wKey : '');
       const hasAny =
         freshReports.length > 0 ||
         freshNotices.length > 0 ||
         !!freshFortune ||
         !!freshBalance ||
         !!freshRecap ||
+        !!freshYearly ||
+        freshWorldcup ||
         freshPending.length > 0 ||
         freshReviewPending.length > 0;
       // 하루 최초 1회만 자동으로 팝업 — 이후엔 종 아이콘 뱃지로만 알림
@@ -399,6 +435,8 @@ export default function DailyPopup({ myId }: { myId: string }) {
       ...(fortuneKey ? [fortuneKey] : []),
       ...(balanceKey ? [balanceKey] : []),
       ...(recapKey ? [recapKey] : []),
+      ...(yearlyKey ? [yearlyKey] : []),
+      ...(worldcupKey ? [worldcupKey] : []),
       ...pendingRecords.map(recordKey),
       ...reviewPending.map(reviewKey),
     ]);
@@ -413,18 +451,22 @@ export default function DailyPopup({ myId }: { myId: string }) {
     setBalanceKey('');
     setRecap(null);
     setRecapKey('');
+    setYearly(null);
+    setYearlyKey('');
+    setWorldcup(false);
+    setWorldcupKey('');
     setPendingRecords([]);
     setReviewPending([]);
   }
 
   // 종 뱃지 숫자 = 소식이 있는 탭 개수
   const tabCount =
-    (recap ? 1 : 0) +
+    (recap || yearly ? 1 : 0) +
     (notices.length > 0 ? 1 : 0) +
     (reports.length > 0 ? 1 : 0) +
     (pendingRecords.length > 0 || reviewPending.length > 0 ? 1 : 0) +
     (fortune ? 1 : 0) +
-    (balance ? 1 : 0);
+    (balance || worldcup ? 1 : 0);
 
   return (
     <>
@@ -459,6 +501,8 @@ export default function DailyPopup({ myId }: { myId: string }) {
               balanceVotes={balanceVotes}
               onBalanceVote={handleBalanceVote}
               recap={recap}
+              yearly={yearly}
+              worldcup={worldcup}
               pendingRecords={pendingRecords}
               reviewPending={reviewPending}
               myId={myId}
@@ -481,7 +525,7 @@ const TAB_LABEL: Record<PopupTab, string> = {
   fortune: '🔮 운세',
   record: '📝 기록',
   report: '📢 보고',
-  balance: '⚖️ 밸런스',
+  balance: '🎮 게임',
 };
 
 // 팝업 렌더링만 담당 — DevInfo의 "미리보기"에서도 샘플 데이터로 재사용
@@ -494,6 +538,8 @@ export function DailyPopupView({
   balanceVotes = [],
   onBalanceVote,
   recap = null,
+  yearly = null,
+  worldcup = false,
   pendingRecords = [],
   reviewPending = [],
   myId = '',
@@ -508,6 +554,8 @@ export function DailyPopupView({
   balanceVotes?: BalanceVote[];
   onBalanceVote?: (choice: BalanceChoice) => Promise<void>;
   recap?: MonthlyRecap | null;
+  yearly?: YearlyRecap | null;
+  worldcup?: boolean;
   pendingRecords?: Lunch[];
   reviewPending?: Lunch[];
   myId?: string;
@@ -519,14 +567,14 @@ export function DailyPopupView({
   const dayOf = notices.filter((n) => n.daysUntil === 0);
   const upcoming = notices.filter((n) => n.daysUntil > 0);
 
-  // 내용이 있는 탭만 순서대로 (결산 → 기념일 → 보고 → 기록 → 운세 → 밸런스)
+  // 내용이 있는 탭만 순서대로 (결산 → 기념일 → 보고 → 기록 → 운세 → 게임)
   const tabs: PopupTab[] = [
-    ...(recap ? (['recap'] as const) : []),
+    ...(recap || yearly ? (['recap'] as const) : []),
     ...(notices.length > 0 ? (['anniv'] as const) : []),
     ...(reports.length > 0 ? (['report'] as const) : []),
     ...(pendingRecords.length > 0 || reviewPending.length > 0 ? (['record'] as const) : []),
     ...(fortune ? (['fortune'] as const) : []),
-    ...(balance ? (['balance'] as const) : []),
+    ...(balance || worldcup ? (['balance'] as const) : []),
   ];
   const [active, setActive] = useState<PopupTab>(tabs[0] ?? 'report');
 
@@ -578,7 +626,8 @@ export function DailyPopupView({
         ) : null}
 
         <div className="px-5 pb-4 space-y-4 overflow-y-auto">
-          {/* 월간 결산 (매월 1~5일 1회) */}
+          {/* 결산: 연말 리캡(시즌 1회) + 월간 결산(매월 1~5일 1회) */}
+          {active === 'recap' && yearly ? <YearlyRecapSection yearly={yearly} /> : null}
           {active === 'recap' && recap ? <RecapSection recap={recap} /> : null}
 
           {/* 먹기록 업데이트 알림 — 날짜 지난 위시 기록 + 내 평 안 남긴 기록 */}
@@ -642,7 +691,7 @@ export function DailyPopupView({
                     className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2"
                   >
                     <span className="text-lg">{n.emoji}</span>
-                    <span className="text-xs text-ink-700 font-medium flex-1 min-w-0 truncate">{n.text}</span>
+                    <span className="text-xs text-ink-700 font-medium flex-1 min-w-0 break-keep">{n.text}</span>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800 shrink-0">
                       D-{n.daysUntil}
                     </span>
@@ -695,7 +744,20 @@ export function DailyPopupView({
             </div>
           ) : null}
 
-          {/* 오늘의 밸런스 게임 */}
+          {/* 게임: 맛집 월드컵 개막 알림(연말) + 오늘의 밸런스 게임 */}
+          {active === 'balance' && worldcup ? (
+            <Link
+              to="/memo"
+              onClick={onClose}
+              className="block rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 px-4 py-3 text-center hover:border-indigo-400 transition-colors"
+            >
+              <p className="text-2xl leading-none">🏟️</p>
+              <p className="mt-1.5 text-sm font-bold text-ink-900">맛집 월드컵 개막!</p>
+              <p className="mt-0.5 text-[11px] text-ink-500 break-keep">
+                올해 다녀온 가게들로 우리 팀 챔피언을 뽑아요 — 아무거나 탭에서 도전 →
+              </p>
+            </Link>
+          ) : null}
           {active === 'balance' && balance ? (
             <BalanceSection
               question={balance}
@@ -718,6 +780,33 @@ export function DailyPopupView({
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// 연말 리캡 — 올해 총결산 카드 (연말 시즌 1회)
+function YearlyRecapSection({ yearly }: { yearly: YearlyRecap }) {
+  return (
+    <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-b from-amber-50 to-white px-4 py-4 text-center">
+      <p className="text-2xl leading-none">🎁</p>
+      <p className="mt-1.5 text-sm font-bold text-ink-900">{yearly.year}년 쪼물랭 총결산</p>
+      <p className="mt-2 text-xs text-ink-700 break-keep leading-relaxed">
+        올해 우리는 <b>{yearly.places}곳</b>에서 <b>{yearly.total}번</b> 함께 먹었어요
+        <br />
+        <span className="text-[11px] text-ink-500">
+          🍜 쪼물런치 {yearly.lunchCount} · 🌙 쪼물디너 {yearly.dinnerCount} · ✍️ 리뷰{' '}
+          {yearly.reviewCount}개
+        </span>
+      </p>
+      {yearly.topPlace ? (
+        <p className="mt-2 text-[11px] text-ink-600 break-keep">
+          올해의 최다 방문 🏆 <b className="text-ink-900">{yearly.topPlace.name}</b> (
+          {yearly.topPlace.count}번)
+        </p>
+      ) : null}
+      <p className="mt-2.5 text-[11px] text-pretzel font-semibold break-keep">
+        올 한 해도 맛있게 잘 살았어요. 내년에도 맛있는 일만 가득하길! 🥨
+      </p>
     </div>
   );
 }

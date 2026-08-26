@@ -271,6 +271,9 @@ export default function DevInfo() {
                     <Code>places</Code>: name_key(PK) · name · lat/lng — 지도 탭 핀 좌표 (좌표
                     없는 가게는 생략)
                   </li>
+                  <li>
+                    <Code>settings</Code>: key(PK) · value — 팀 공유 설정 (절약 챌린지 목표액 등)
+                  </li>
                 </ul>
                 <p className="mt-1 text-[11px] text-ink-400">
                   캘린더 점심 구분: 🍜 쪼물런치(🛵 배달) · 🍽️ 개인 약속 · 🍱 도시락(둘 다 없는

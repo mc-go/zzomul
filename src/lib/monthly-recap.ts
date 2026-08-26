@@ -1,5 +1,6 @@
-import { format, getDaysInMonth, subMonths } from 'date-fns';
+import { format, getDaysInMonth, startOfWeek, subDays, subMonths } from 'date-fns';
 import type { Lunch } from './lunches';
+import type { LunchReview } from './reviews';
 import { normalizeRestaurant } from './lunch-stats';
 import { hashSeed, mulberry32 } from './fortune';
 
@@ -12,6 +13,53 @@ const RECAP_WINDOW_LAST_DAY = 5;
 
 export function inRecapWindow(today: Date): boolean {
   return today.getDate() <= RECAP_WINDOW_LAST_DAY;
+}
+
+// 연말 시즌: 12월 마지막 주(월요일 시작)의 한 주 전부터 연말까지 — 연말 리캡·맛집 월드컵 공용
+export function isYearEndSeason(today: Date): boolean {
+  if (today.getMonth() !== 11) return false;
+  const lastWeekStart = startOfWeek(new Date(today.getFullYear(), 11, 31), { weekStartsOn: 1 });
+  const windowStart = subDays(lastWeekStart, 7);
+  return today.getTime() >= windowStart.getTime();
+}
+
+export type YearlyRecap = {
+  year: string;
+  total: number;
+  lunchCount: number;
+  dinnerCount: number;
+  places: number; // 방문한 가게 수
+  topPlace: { name: string; count: number } | null;
+  reviewCount: number;
+};
+
+// 연말 리캡 — 올해 총결산 (연말 시즌에만, 기록 없으면 null)
+export function getYearlyRecap(
+  lunches: Lunch[],
+  reviews: Record<number, LunchReview[]>,
+  today: Date,
+): YearlyRecap | null {
+  if (!isYearEndSeason(today)) return null;
+  const year = String(today.getFullYear());
+  const done = lunches.filter((l) => l.status === 'done' && l.date.startsWith(year));
+  if (done.length === 0) return null;
+  const byPlace: Record<string, { name: string; count: number }> = {};
+  for (const l of done) {
+    const key = normalizeRestaurant(l.restaurant);
+    if (!key) continue;
+    (byPlace[key] ??= { name: l.restaurant, count: 0 }).count += 1;
+  }
+  const placesAll = Object.values(byPlace).sort((a, b) => b.count - a.count);
+  const lunchCount = done.filter((l) => l.meal === 'lunch').length;
+  return {
+    year,
+    total: done.length,
+    lunchCount,
+    dinnerCount: done.length - lunchCount,
+    places: placesAll.length,
+    topPlace: placesAll[0] ?? null,
+    reviewCount: done.reduce((n, l) => n + (reviews[l.id] ?? []).length, 0),
+  };
 }
 
 export type MonthlyRecap = {

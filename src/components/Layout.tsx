@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuMap, LuSettings, LuGift, LuUserRound, LuMessageSquare, LuStickyNote, LuSparkles } from 'react-icons/lu';
+import { LuCalendarDays, LuUtensils, LuLogOut, LuMegaphone, LuMap, LuSettings, LuGift, LuPiggyBank, LuUserRound, LuMessageSquare, LuStickyNote, LuSparkles } from 'react-icons/lu';
 import { GiPretzel } from 'react-icons/gi';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
@@ -11,7 +11,9 @@ import ProfileEditor from './ProfileEditor';
 import StatusEditor from './StatusEditor';
 import DevInfo from './DevInfo';
 import DailyPopup from './DailyPopup';
+import PretzelLevel from './PretzelLevel';
 import AnniversaryManager from './AnniversaryManager';
+import SavingsGoalEditor from './SavingsGoalEditor';
 import FloatingBreads from './FloatingBreads';
 import PullToRefresh from './PullToRefresh';
 
@@ -32,6 +34,7 @@ export default function Layout() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [annivOpen, setAnnivOpen] = useState(false);
+  const [savingsOpen, setSavingsOpen] = useState(false);
 
   const profileId = session?.userId ? String(session.userId) : '';
   const myProfile = profileId ? getProfile(profileId) : null;
@@ -63,18 +66,22 @@ export default function Layout() {
       <header className="sticky top-0 z-30 bg-[#fdfaf3]/90 backdrop-blur border-b border-pretzel/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-8">
-            {/* 로고 클릭 시 프레첼이 한 바퀴 스핀 */}
-            <button
-              type="button"
-              onClick={() => setLogoSpin(true)}
-              className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight select-none"
-            >
-              <GiPretzel
-                className={`text-2xl text-pretzel ${logoSpin ? 'animate-spinonce' : 'animate-wiggle'}`}
-                onAnimationEnd={() => logoSpin && setLogoSpin(false)}
-              />
-              쪼물랭
-            </button>
+            <div className="flex items-center gap-2">
+              {/* 로고 클릭 시 프레첼이 한 바퀴 스핀 */}
+              <button
+                type="button"
+                onClick={() => setLogoSpin(true)}
+                className="inline-flex items-center gap-1.5 text-lg font-semibold tracking-tight select-none"
+              >
+                <GiPretzel
+                  className={`text-2xl text-pretzel ${logoSpin ? 'animate-spinonce' : 'animate-wiggle'}`}
+                  onAnimationEnd={() => logoSpin && setLogoSpin(false)}
+                />
+                쪼물랭
+              </button>
+              {/* 프레첼 키우기 — 팀 활동량으로 자라는 레벨 뱃지 */}
+              <PretzelLevel />
+            </div>
             <nav className="hidden sm:flex items-center gap-1">
               <NavLink
                 to="/calendar"
@@ -198,6 +205,19 @@ export default function Layout() {
                       <LuGift className="text-sm" />
                       기념일 설정
                     </button>
+                    {effectiveEmpNo ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setSavingsOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                      >
+                        <LuPiggyBank className="text-sm" />
+                        절약 목표 설정
+                      </button>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -325,6 +345,15 @@ export default function Layout() {
             });
             setEditing(false);
           }}
+        />
+      ) : null}
+
+      {savingsOpen && effectiveEmpNo ? (
+        <SavingsGoalEditor
+          empNo={effectiveEmpNo}
+          year={todayStr.slice(0, 4)}
+          displayName={displayName}
+          onClose={() => setSavingsOpen(false)}
         />
       ) : null}
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { LuTrash2, LuPencil, LuX, LuStickyNote } from 'react-icons/lu';
@@ -14,16 +14,22 @@ import {
   ensureBalanceSchema,
   getBalanceQuestion,
   listBalanceVotes,
+  listBalanceVotesForMonth,
   upsertBalanceVote,
   type BalanceChoice,
   type BalanceVote,
 } from '../lib/balance';
+import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
+import { ensureReviewsSchema, listAllReviews, type LunchReview } from '../lib/reviews';
+import { computeBingo } from '../lib/bingo';
 import { isValidParticipantId } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import Avatar from '../components/Avatar';
 import { BalanceSection } from '../components/DailyPopup';
+import BingoSection from '../components/Bingo';
+import { WorldCupModal, buildContenders, isWorldCupSeason } from '../components/WorldCup';
 
 export default function MemoPage() {
   const { session } = useAuth();
@@ -40,8 +46,13 @@ export default function MemoPage() {
   const [editing, setEditing] = useState<Memo | null>(null);
   // 오늘의 밸런스 게임 — 팝업을 닫은 뒤에도 여기서 결과 확인/재투표 가능
   const [todayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const monthKey = todayKey.slice(0, 7);
   const balanceQuestion = getBalanceQuestion(todayKey);
   const [balanceVotes, setBalanceVotes] = useState<BalanceVote[] | null>(null);
+  // 게임 코너(빙고·월드컵)용 데이터 — 실패 시 해당 섹션만 생략
+  const [lunches, setLunches] = useState<Lunch[] | null>(null);
+  const [reviews, setReviews] = useState<Record<number, LunchReview[]>>({});
+  const [monthVotes, setMonthVotes] = useState<BalanceVote[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,10 +64,39 @@ export default function MemoPage() {
       .catch(() => {
         /* 조회 실패 시 밸런스 카드만 생략 */
       });
+    (async () => {
+      try {
+        await Promise.all([ensureLunchesSchema(), ensureReviewsSchema()]);
+        const [rows, revs, mv] = await Promise.all([
+          listLunches(),
+          listAllReviews(),
+          listBalanceVotesForMonth(monthKey),
+        ]);
+        if (cancelled) return;
+        setLunches(rows);
+        setReviews(revs);
+        setMonthVotes(mv);
+      } catch {
+        /* 조회 실패 시 빙고/월드컵만 생략 */
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [todayKey]);
+  }, [todayKey, monthKey]);
+
+  const bingo = useMemo(
+    () => (lunches ? computeBingo(monthKey, lunches, reviews, monthVotes) : null),
+    [lunches, reviews, monthVotes, monthKey],
+  );
+  // 게임 코너 — 타일을 누르면 팝업으로 상세가 열림
+  const [openGame, setOpenGame] = useState<'bingo' | 'worldcup' | 'balance' | null>(null);
+  const worldcupSeason = isWorldCupSeason(new Date());
+  const contenders = useMemo(
+    () => (worldcupSeason && lunches ? buildContenders(lunches, todayKey.slice(0, 4)) : null),
+    [worldcupSeason, lunches, todayKey],
+  );
+  const myVote = balanceVotes?.find((v) => v.voterId === myPid)?.choice ?? null;
 
   async function handleBalanceVote(choice: BalanceChoice) {
     if (!isValidParticipantId(myPid)) return;
@@ -127,9 +167,64 @@ export default function MemoPage() {
         </p>
       </div>
 
-      {/* 오늘의 밸런스 게임 — 투표 전엔 결과 비공개 (팝업과 동일 규칙) */}
-      {balanceVotes !== null ? (
-        <div className="mb-6">
+      {/* 🎮 게임 코너 — 타일 한 줄(빙고 → 월드컵(연말 한정) → 밸런스), 누르면 팝업으로 상세 */}
+      {bingo || balanceVotes !== null ? (
+        <div
+          className={`mb-6 grid gap-2 ${worldcupSeason ? 'grid-cols-3' : 'grid-cols-2'}`}
+        >
+          {bingo ? (
+            <GameTile
+              emoji="🎯"
+              title="쪼물 빙고"
+              status={`${bingo.doneCount}/9칸${bingo.lines > 0 ? ` · ${bingo.lines}줄!` : ''}`}
+              accent="lime"
+              onClick={() => setOpenGame('bingo')}
+            />
+          ) : (
+            <GameTilePlaceholder />
+          )}
+          {worldcupSeason ? (
+            <GameTile
+              emoji="🏟️"
+              title="맛집 월드컵"
+              status={contenders ? '챔피언 뽑기 · 연말 한정' : '가게 4곳부터 열려요'}
+              accent="indigo"
+              disabled={!contenders}
+              onClick={() => contenders && setOpenGame('worldcup')}
+            />
+          ) : null}
+          {balanceVotes !== null ? (
+            <GameTile
+              emoji="⚖️"
+              title="밸런스 게임"
+              status={myVote ? '투표 완료 ✅' : '오늘의 한 판 👀'}
+              accent="orange"
+              onClick={() => setOpenGame('balance')}
+            />
+          ) : (
+            <GameTilePlaceholder />
+          )}
+        </div>
+      ) : null}
+
+      {openGame === 'bingo' && bingo ? (
+        <GameModal title="🎯 이달의 쪼물 빙고" onClose={() => setOpenGame(null)}>
+          <BingoSection board={bingo} />
+        </GameModal>
+      ) : null}
+
+      {openGame === 'worldcup' && contenders ? (
+        <WorldCupModal
+          initial={contenders}
+          year={todayKey.slice(0, 4)}
+          myName={myPid ? resolveName(myPid) : ''}
+          myPid={myPid}
+          onClose={() => setOpenGame(null)}
+        />
+      ) : null}
+
+      {openGame === 'balance' && balanceVotes !== null ? (
+        <GameModal title="⚖️ 오늘의 밸런스 게임" onClose={() => setOpenGame(null)}>
           <BalanceSection
             question={balanceQuestion}
             votes={balanceVotes}
@@ -138,7 +233,7 @@ export default function MemoPage() {
             resolveName={resolveName}
             getProfile={getProfileByEmpNo}
           />
-        </div>
+        </GameModal>
       ) : null}
 
       {canWrite ? (
@@ -240,6 +335,89 @@ export default function MemoPage() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+// 게임 코너 타일 — 누르면 해당 게임 팝업이 열림
+const TILE_ACCENT = {
+  lime: 'border-lime-200 hover:border-lime-400 bg-gradient-to-b from-lime-50/60 to-white',
+  indigo: 'border-indigo-200 hover:border-indigo-400 bg-gradient-to-b from-indigo-50/60 to-white',
+  orange: 'border-orange-200 hover:border-orange-400 bg-gradient-to-b from-orange-50/60 to-white',
+} as const;
+
+function GameTile({
+  emoji,
+  title,
+  status,
+  accent,
+  disabled = false,
+  onClick,
+}: {
+  emoji: string;
+  title: string;
+  status: string;
+  accent: keyof typeof TILE_ACCENT;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-2xl border-2 px-2 py-3 text-center shadow-card transition-all ${
+        disabled
+          ? 'border-ink-100 bg-ink-50/40 opacity-60 cursor-default'
+          : `${TILE_ACCENT[accent]} hover:-translate-y-0.5 active:scale-[0.97]`
+      }`}
+    >
+      <p className="text-2xl leading-none">{emoji}</p>
+      <p className="mt-1.5 text-[11px] font-bold text-ink-900 break-keep">{title}</p>
+      <p className="mt-0.5 text-[10px] text-ink-500 break-keep">{status}</p>
+    </button>
+  );
+}
+
+function GameTilePlaceholder() {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-ink-100 bg-white/50 px-2 py-3 text-center">
+      <p className="text-2xl leading-none opacity-30">🎮</p>
+      <p className="mt-1.5 text-[10px] text-ink-300">불러오는 중...</p>
+    </div>
+  );
+}
+
+// 게임 상세 팝업 (하단 시트 → sm 이상 중앙)
+function GameModal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-ink-900/40 backdrop-blur-sm p-0 sm:p-4">
+      <div
+        className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-lg border border-ink-100 max-h-[90vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex items-center justify-between px-5 py-4 border-b border-ink-100">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-ink-400 hover:text-ink-900 p-1 rounded"
+            aria-label="닫기"
+          >
+            <LuX />
+          </button>
+        </header>
+        <div className="p-5 overflow-y-auto">{children}</div>
+      </div>
     </div>
   );
 }
