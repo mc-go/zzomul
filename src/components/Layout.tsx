@@ -13,6 +13,7 @@ import DevInfo from './DevInfo';
 import DailyPopup from './DailyPopup';
 import AnniversaryManager from './AnniversaryManager';
 import FloatingBreads from './FloatingBreads';
+import PullToRefresh from './PullToRefresh';
 
 const linkBase =
   'flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-medium transition-colors';
@@ -336,6 +337,9 @@ export default function Layout() {
           onChanged={refreshAnniversaries}
         />
       ) : null}
+
+      {/* 홈 화면 앱(standalone)에서만: 당겨서 새로고침 */}
+      <PullToRefresh />
 
       {/* 배경에 구름처럼 흘러가는 선 드로잉 빵들 */}
       <FloatingBreads />
