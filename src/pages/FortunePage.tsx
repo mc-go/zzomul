@@ -106,7 +106,7 @@ export default function FortunePage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight">🔮 오늘의 운세</h1>
         <p className="text-xs text-ink-400 mt-0.5">
-          {format(new Date(), 'M월 d일 (EEE)', { locale: ko })} · 생일 기운으로 점쳐봤어요
+          {format(new Date(), 'M월 d일 (EEE)', { locale: ko })} · 생일과 MBTI 기운으로 점쳐봤어요
         </p>
       </div>
 

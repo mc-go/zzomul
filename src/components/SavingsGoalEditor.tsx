@@ -95,14 +95,19 @@ export default function SavingsGoalEditor({
         </header>
 
         <form onSubmit={submit} className="p-5 space-y-4">
-          <p className="text-xs text-ink-500 break-keep">
-            <b className="text-ink-700">{displayName}</b>님의 웰빙 저금통이에요 — 도시락으로
-            아낀 돈과 챙긴 건강을 같이 모아요. 절약 목표는 캘린더 도시락 리포트의 이름 옆
-            게이지로 진행률이 보여요. (2026년은 8월부터 집계)
-          </p>
+          <div className="rounded-xl bg-ink-50/60 border border-ink-100 px-3.5 py-3">
+            <p className="text-xs font-medium text-ink-700">
+              <b>{displayName}</b>님의 웰빙 저금통
+            </p>
+            <ul className="mt-1.5 text-[11px] text-ink-500 space-y-1 break-keep">
+              <li>🍱 도시락으로 아낀 돈과 챙긴 건강을 같이 모아요</li>
+              <li>📊 진행률은 캘린더 도시락 리포트의 이름 옆 게이지에 보여요</li>
+              <li>🗓️ 2026년은 8월부터 집계돼요</li>
+            </ul>
+          </div>
           <div>
             <span className="block text-[11px] font-medium text-ink-500 mb-1.5">
-              {year}년 절약 목표액 (원)
+              💰 {year}년 절약 목표액 (원)
             </span>
             <input
               type="text"
@@ -122,7 +127,7 @@ export default function SavingsGoalEditor({
           </div>
           <div>
             <span className="block text-[11px] font-medium text-ink-500 mb-1.5">
-              내 도시락 한 끼 칼로리 (kcal)
+              🔥 내 도시락 한 끼 칼로리 (kcal)
             </span>
             <input
               type="text"
