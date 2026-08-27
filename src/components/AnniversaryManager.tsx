@@ -152,7 +152,7 @@ export default function AnniversaryManager({
           </button>
         </header>
 
-        <div className="p-5 space-y-5 overflow-y-auto">
+        <div className="p-5 space-y-5 overflow-y-auto overflow-x-hidden">
           {/* 등록된 기념일 목록 */}
           {items.length === 0 ? (
             <p className="text-xs text-ink-400 text-center py-2">아직 등록된 기념일이 없어요.</p>

@@ -1,13 +1,14 @@
-import { useState, type FormEvent } from 'react';
-import { format } from 'date-fns';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { format, subMonths, subYears } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { LuX, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuX, LuPencil, LuTrash2 } from 'react-icons/lu';
 import Avatar from './Avatar';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useAppData } from '../contexts/AppDataContext';
 import { MEMBER_EMPNOS, EXTRA_PARTICIPANTS } from '../lib/members';
 import { KIND_STYLES, isAwayAtLunch, kindFor, labelForRecord } from '../lib/attendance-status';
 import { holidayName } from '../lib/holidays';
+import { ensureReportsSchema, listReportsForDate, type Report } from '../lib/reports';
 import type { AttendanceRecord } from '../lib/attendance';
 import type { LunchPlan } from '../lib/lunch-plans';
 import type { Lunch } from '../lib/lunches';
@@ -18,11 +19,13 @@ type Props = {
   recordsByEmpNo: Record<string, AttendanceRecord | undefined>;
   plans: LunchPlan[];
   lunches: Lunch[]; // 그 날짜의 먹기록 (점심: 참여자별 쪼물런치 판단, 저녁: 쪼물디너 섹션)
+  allLunchesByDate: Record<string, Lunch[]>; // 전체 날짜별 먹기록 — 타임캡슐(1년 전/6개월 전)용
   anniversaries: AnniversaryOccurrence[]; // 그 날짜의 기념일
   isDosirak: boolean; // 쪼물런치도 약속도 없는 날 = 도시락 날 (상세에서만 표시)
   myEmpNo: string; // 없으면(게스트 등) 약속 등록 UI 숨김
   onSavePlanFor: (empNo: string, note: string) => Promise<void>;
   onDeletePlanFor: (empNo: string) => Promise<void>;
+  onStep?: (delta: 1 | -1) => void; // 헤더 ◀ ▶ — 패널을 닫지 않고 이전/다음 날짜로
   onClose: () => void;
 };
 
@@ -68,11 +71,13 @@ export default function DatePanel({
   recordsByEmpNo,
   plans,
   lunches,
+  allLunchesByDate,
   anniversaries,
   isDosirak,
   myEmpNo,
   onSavePlanFor,
   onDeletePlanFor,
+  onStep,
   onClose,
 }: Props) {
   const { getProfileByEmpNo, getStatus } = useProfiles();
@@ -114,21 +119,44 @@ export default function DatePanel({
         role="dialog"
         aria-modal="true"
       >
-        <header className="flex items-center justify-between px-4 py-3 border-b border-ink-100">
-          <div>
+        <header className="flex items-center justify-between gap-1 px-4 py-3 border-b border-ink-100">
+          <div className="min-w-0">
             <p className="text-[10px] font-medium text-ink-400 tracking-wide uppercase mb-0.5">
               선택된 날짜
             </p>
-            <h2 className="text-sm font-semibold">{dateLabel}</h2>
+            <h2 className="text-sm font-semibold truncate">{dateLabel}</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-ink-400 hover:text-ink-900 p-1.5 rounded"
-            aria-label="닫기"
-          >
-            <LuX />
-          </button>
+          <div className="flex items-center shrink-0">
+            {/* 패널을 닫지 않고 날짜 넘기기 (주말은 건너뜀) */}
+            {onStep ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onStep(-1)}
+                  className="text-ink-400 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50"
+                  aria-label="이전 날짜"
+                >
+                  <LuChevronLeft />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onStep(1)}
+                  className="text-ink-400 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50"
+                  aria-label="다음 날짜"
+                >
+                  <LuChevronRight />
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-ink-400 hover:text-ink-900 p-1.5 rounded"
+              aria-label="닫기"
+            >
+              <LuX />
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -150,6 +178,7 @@ export default function DatePanel({
           ) : null}
 
           <LunchPlanSection
+            key={dateStr} // 날짜를 넘길 때 편집 중이던 메모 입력 상태 초기화
             plans={plans}
             dayLunch={lunches.find((l) => l.meal === 'lunch') ?? null}
             isDosirak={isDosirak}
@@ -269,9 +298,95 @@ export default function DatePanel({
               </ul>
             </section>
           ) : null}
+
+          {/* 🕰️ 타임캡슐 — 부가 정보라 맨 하단, 그때 기록이 없으면 통째로 숨김 */}
+          <TimeCapsuleSection
+            date={date}
+            allLunchesByDate={allLunchesByDate}
+            resolveName={resolveName}
+          />
         </div>
       </aside>
     </>
+  );
+}
+
+// 🕰️ 타임캡슐: 선택한 날짜의 1년 전/6개월 전 같은 날 — 그날 먹은 것과 쓴 보고를 회고.
+// 먹기록은 이미 메모리에 있는 전체 목록에서 꺼내고, 보고만 두 날짜 1회 조회 (실패 시 생략).
+function TimeCapsuleSection({
+  date,
+  allLunchesByDate,
+  resolveName,
+}: {
+  date: Date;
+  allLunchesByDate: Record<string, Lunch[]>;
+  resolveName: (id: string) => string;
+}) {
+  const capsules = useMemo(
+    () => [
+      { label: '1년 전 이날', key: format(subYears(date, 1), 'yyyy-MM-dd') },
+      { label: '6개월 전 이날', key: format(subMonths(date, 6), 'yyyy-MM-dd') },
+    ],
+    [date],
+  );
+  const [reportsByKey, setReportsByKey] = useState<Record<string, Report[]>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await ensureReportsSchema();
+        const entries = await Promise.all(
+          capsules.map(async (c) => [c.key, await listReportsForDate(c.key)] as const),
+        );
+        if (!cancelled) setReportsByKey(Object.fromEntries(entries));
+      } catch {
+        /* 보고 회고만 생략 — 먹기록은 그대로 보임 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [capsules]);
+
+  const rows = capsules
+    .map((c) => ({
+      ...c,
+      lunches: (allLunchesByDate[c.key] ?? []).filter((l) => l.status === 'done'),
+      reports: reportsByKey[c.key] ?? [],
+    }))
+    .filter((r) => r.lunches.length > 0 || r.reports.length > 0);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+      <h3 className="text-[11px] font-semibold text-violet-600 mb-1.5">🕰️ 타임캡슐</h3>
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.key}>
+            <p className="text-[10px] font-semibold text-ink-400">
+              {r.label} · {format(new Date(`${r.key}T00:00:00`), 'yyyy.M.d (EEE)', { locale: ko })}
+            </p>
+            {r.lunches.length > 0 ? (
+              <p className="text-xs text-ink-700 mt-0.5 break-keep">
+                {r.lunches
+                  .map(
+                    (l) =>
+                      `${l.delivery ? '🛵' : l.meal === 'lunch' ? '🍜' : '🌙'} ${l.restaurant}`,
+                  )
+                  .join(' · ')}
+              </p>
+            ) : null}
+            {r.reports.map((rep) => (
+              <p key={rep.id} className="text-[11px] text-ink-500 mt-1 break-keep line-clamp-2">
+                📢 <b className="text-ink-600">{resolveName(rep.authorId)}</b> — {rep.content}
+              </p>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

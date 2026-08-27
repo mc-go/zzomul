@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getFortune, type Fortune } from '../lib/fortune';
-import { computeMukBTI, type MukBTI } from '../lib/mukbti';
+import { computeMukBTI, computeTasteMatches, type MukBTI } from '../lib/mukbti';
 import { ensureSettingsSchema, getSetting, mbtiKey } from '../lib/settings';
 import { ensureSchema as ensureLunchesSchema, listLunches, type Lunch } from '../lib/lunches';
 import { ensureReviewsSchema, listAllReviews, type LunchReview } from '../lib/reviews';
@@ -76,6 +76,12 @@ export default function FortunePage() {
     for (const emp of MEMBER_EMPNOS) map[emp] = computeMukBTI(emp, lunches, reviews);
     return map;
   }, [lunches, reviews]);
+
+  // 입맛 궁합 — 같은 기록에 남긴 별점 차이 기반 페어 점수 (데이터 로드 전엔 숨김)
+  const tasteMatches = useMemo(
+    () => (lunches ? computeTasteMatches(MEMBER_EMPNOS, reviews) : null),
+    [lunches, reviews],
+  );
 
   // 사번 → 생일 (anniversaries의 birthday 항목)
   const birthdayByEmpNo = useMemo(() => {
@@ -152,6 +158,55 @@ export default function FortunePage() {
               />
             );
           })}
+
+          {/* 💞 입맛 궁합 — 같은 기록에 남긴 별점이 얼마나 비슷한지 페어별로 */}
+          {tasteMatches && tasteMatches.length > 0 ? (
+            <section className="rounded-2xl border border-rose-100 bg-gradient-to-b from-rose-50/60 to-white p-4">
+              <h2 className="text-sm font-bold text-ink-900">💞 입맛 궁합</h2>
+              <p className="text-[10px] text-ink-400 mt-0.5 break-keep">
+                같은 기록에 남긴 별점이 비슷할수록 올라가요
+              </p>
+              <ul className="mt-2.5 space-y-1.5">
+                {tasteMatches.map((m) => (
+                  <li
+                    key={`${m.a}-${m.b}`}
+                    className="flex items-center flex-wrap gap-x-2 gap-y-1 rounded-xl border border-ink-100 bg-white px-3 py-2"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Avatar
+                        profile={getProfileByEmpNo(m.a)}
+                        size="xs"
+                        fallbackText={resolveName(m.a)}
+                      />
+                      <span className="text-xs font-medium text-ink-800">{resolveName(m.a)}</span>
+                    </span>
+                    <span className="text-xs">{m.emoji}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Avatar
+                        profile={getProfileByEmpNo(m.b)}
+                        size="xs"
+                        fallbackText={resolveName(m.b)}
+                      />
+                      <span className="text-xs font-medium text-ink-800">{resolveName(m.b)}</span>
+                    </span>
+                    {m.score != null ? (
+                      <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap">
+                        <span className="text-sm font-bold text-rose-500">{m.score}%</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100">
+                          {m.label}
+                        </span>
+                        <span className="text-[10px] text-ink-300">기록 {m.shared}개</span>
+                      </span>
+                    ) : (
+                      <span className="ml-auto text-[10px] text-ink-400 whitespace-nowrap">
+                        같이 별점 남긴 기록이 {m.shared}개 — 3개부터 공개돼요 🔍
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       )}
     </div>
@@ -180,12 +235,28 @@ function MukBTIBlock({ mukbti }: { mukbti: MukBTI | undefined }) {
             {mukbti.emoji} {mukbti.title}
           </p>
           <p className="mt-0.5 text-[11px] text-ink-500 break-keep">{mukbti.description}</p>
+          {/* 개성 칩 + 최애 가게 — 유형이 같아도 사람별로 갈리는 포인트 */}
+          {mukbti.traits.length > 0 || mukbti.favorite ? (
+            <div className="mt-1.5 flex items-center flex-wrap gap-1">
+              {mukbti.traits.map((t) => (
+                <span
+                  key={t}
+                  className="text-[10px] px-1.5 py-0.5 rounded-full border bg-ink-50 text-ink-600 border-ink-100 whitespace-nowrap"
+                >
+                  {t}
+                </span>
+              ))}
+              {mukbti.favorite ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100 max-w-full truncate">
+                  ❤️ 최애 {mukbti.favorite.name} ⭐{mukbti.favorite.rating.toFixed(1)}
+                  {mukbti.favorite.count > 1 ? ` ×${mukbti.favorite.count}` : ''}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {/* 평균 별점은 설명 문장에 이미 있어서 여기선 생략 (중복 방지) */}
           <p className="mt-1 text-[10px] text-ink-400 break-keep">
-            함께한 기록 {mukbti.stats.participations}회 · 가본 곳 {mukbti.stats.places}곳 · 새 가게
-            비율 {Math.round(mukbti.stats.adventureRatio * 100)}%
-            {mukbti.stats.avgRating != null
-              ? ` · 내 평균 ⭐ ${mukbti.stats.avgRating.toFixed(1)}`
-              : ''}
+            함께한 기록 {mukbti.stats.participations}회 · 가본 곳 {mukbti.stats.places}곳
           </p>
         </>
       ) : (

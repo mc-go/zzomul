@@ -215,7 +215,7 @@ export default function Layout() {
                         className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-ink-50 hover:text-ink-900"
                       >
                         <LuPiggyBank className="text-sm" />
-                        절약 목표 설정
+                        웰빙 저금통 설정
                       </button>
                     ) : null}
                   </div>

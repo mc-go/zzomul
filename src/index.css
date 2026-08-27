@@ -32,3 +32,10 @@ textarea,
 select {
   @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40;
 }
+
+/* 모바일 WebKit의 date 입력은 고유 최소 폭이 있어 좁은 팝업에서 컨테이너를 넘칠 수 있음
+   → 넘치면 overflow-y-auto 영역이 가로로도 스크롤되는 원인이라 폭을 강제로 맞춤 */
+input[type='date'] {
+  min-width: 0;
+  max-width: 100%;
+}

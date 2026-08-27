@@ -4,9 +4,10 @@ import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { fetchAttendances, indexByMemberAndDate, type AttendanceRecord } from '../lib/attendance';
 import { kindFor, labelForRecord } from '../lib/attendance-status';
-import { HOLIDAYS, holidayName } from '../lib/holidays';
+import { HOLIDAYS, hasHolidaysForYear, holidayName } from '../lib/holidays';
 import { occurrencesOnDate } from '../lib/anniversaries';
 import { ensureReportsSchema, listReportsForDate, type Report } from '../lib/reports';
+import { fetchOfficeWeather, type OfficeWeather } from '../lib/weather';
 import { MEMBER_EMPNOS } from '../lib/members';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppData } from '../contexts/AppDataContext';
@@ -31,6 +32,18 @@ export default function CalendarWidgets({ todayKey }: { todayKey: string }) {
     AttendanceRecord | undefined
   > | null>(null);
   const [reports, setReports] = useState<Report[] | null>(null);
+  // 바깥 날씨 — Open-Meteo, 실패하면 그냥 생략 (lib/weather.ts에 30분 캐시)
+  const [weather, setWeather] = useState<OfficeWeather | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOfficeWeather().then((w) => {
+      if (!cancelled && w) setWeather(w);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [todayKey]);
 
   // 오늘 근태만 콕 집어 조회 — 캘린더의 월 단위 조회와 독립이라 달을 넘겨도 온도가 유지됨
   useEffect(() => {
@@ -69,7 +82,12 @@ export default function CalendarWidgets({ todayKey }: { todayKey: string }) {
 
   return (
     <div className="mb-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
-      <TemperatureWidget todayKey={todayKey} records={todayRecords} resolveName={resolveName} />
+      <TemperatureWidget
+        todayKey={todayKey}
+        records={todayRecords}
+        resolveName={resolveName}
+        weather={weather}
+      />
       <AnniversaryWidget todayKey={todayKey} />
       <HolidayWidget todayKey={todayKey} />
       <ReportWidget reports={reports} resolveName={resolveName} getProfile={getProfileByEmpNo} />
@@ -157,15 +175,24 @@ function TemperatureWidget({
   todayKey,
   records,
   resolveName,
+  weather,
 }: {
   todayKey: string;
   records: Record<string, AttendanceRecord | undefined> | null;
   resolveName: (id: string) => string;
+  weather: OfficeWeather | null;
 }) {
   const today = new Date(`${todayKey}T00:00:00`);
   const weekday = today.getDay();
   const holiday = holidayName(todayKey);
   const isRestDay = weekday === 0 || weekday === 6 || !!holiday;
+
+  // 바깥 실제 날씨 한 줄 — 쉬는 날/게스트 상태에서도 공통으로 표시
+  const weatherLine = weather ? (
+    <p className="text-[10px] text-ink-400 mt-1 whitespace-nowrap">
+      바깥은 {weather.emoji} {Math.round(weather.temp)}° {weather.label}
+    </p>
+  ) : null;
 
   if (isRestDay) {
     return (
@@ -174,6 +201,7 @@ function TemperatureWidget({
         <p className="text-[11px] text-ink-500 mt-0.5 break-keep">
           {holiday ? `${holiday} — 푹 쉬어요!` : '주말 — 푹 쉬어요!'}
         </p>
+        {weatherLine}
       </Widget>
     );
   }
@@ -183,6 +211,7 @@ function TemperatureWidget({
     return (
       <Widget title="🌡️ 사무실 온도">
         <p className="text-sm font-bold text-ink-300">--°</p>
+        {weatherLine}
       </Widget>
     );
   }
@@ -214,6 +243,7 @@ function TemperatureWidget({
       <p className="text-[10px] text-ink-400 mt-1 break-keep leading-snug" title={away.join(' · ')}>
         {away.length > 0 ? away.join(' · ') : '오늘은 다 모였어요 👏'}
       </p>
+      {weatherLine}
     </Widget>
   );
 }
@@ -233,6 +263,14 @@ function HolidayWidget({ todayKey }: { todayKey: string }) {
       new Date(`${todayKey}T00:00:00`),
     );
     return { date, name: HOLIDAYS[date], daysUntil };
+  }, [todayKey]);
+
+  // 12월인데 다음 해 공휴일이 아직 없으면 경고 — holidays.ts 수동 관리를 잊지 않기 위한 안전장치
+  const missingNextYear = useMemo(() => {
+    const d = new Date(`${todayKey}T00:00:00`);
+    return d.getMonth() === 11 && !hasHolidaysForYear(d.getFullYear() + 1)
+      ? d.getFullYear() + 1
+      : null;
   }, [todayKey]);
 
   return (
@@ -256,6 +294,11 @@ function HolidayWidget({ todayKey }: { todayKey: string }) {
         // holidays.ts에 다음 해 날짜를 아직 안 넣은 연말에 보이는 상태
         <p className="text-xs text-ink-400">등록된 빨간날이 없어요 😢</p>
       )}
+      {missingNextYear ? (
+        <p className="text-[10px] text-red-400 mt-1 break-keep">
+          ⚠️ {missingNextYear}년 공휴일이 아직 없어요 — holidays.ts에 추가해 주세요
+        </p>
+      ) : null}
     </Widget>
   );
 }

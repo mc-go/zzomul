@@ -55,3 +55,10 @@ export const HOLIDAYS: Record<string, string> = {
 export function holidayName(dateKey: string): string | null {
   return HOLIDAYS[dateKey] ?? null;
 }
+
+// 해당 연도의 공휴일이 하나라도 등록돼 있는지 —
+// 연말에 다음 해 추가를 잊지 않도록 위젯에서 점검용으로 사용
+export function hasHolidaysForYear(year: number): boolean {
+  const prefix = `${year}-`;
+  return Object.keys(HOLIDAYS).some((k) => k.startsWith(prefix));
+}

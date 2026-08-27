@@ -10,8 +10,10 @@ import {
   buildPlansByDate,
   computeDosirakStats,
   normalizeRestaurant,
+  statsStartOfYear,
 } from '../lib/lunch-stats';
 import { MEMBER_EMPNOS, isTrackedMember } from '../lib/members';
+import { ensureSettingsSchema, getSetting, dosirakKcalKey } from '../lib/settings';
 import { useAuth } from '../contexts/AuthContext';
 
 // 올해의 먹기록 어워드 — 먹기록 탭 맨 위 요약 카드.
@@ -55,7 +57,10 @@ export default function LunchAwards({
     }
   });
   // 도시락왕: 전원 순위(일수 내림차순) — 근태 조회가 끝나야 알 수 있어서 따로 state
-  const [dosirakRank, setDosirakRank] = useState<{ name: string; days: number }[] | null>(null);
+  // kcal은 ⚙️ 설정의 "내 도시락 한 끼 칼로리" (미설정이면 0 → 표시 생략)
+  const [dosirakRank, setDosirakRank] = useState<
+    { name: string; days: number; kcal: number }[] | null
+  >(null);
 
   function toggle() {
     const next = !collapsed;
@@ -67,6 +72,7 @@ export default function LunchAwards({
     }
   }
 
+  // 먹기록 어워드는 올해 기록 전체 — 8월 하한(STATS_START)은 근태 기반 도시락 집계에만 적용
   const doneThisYear = useMemo(
     () => lunches.filter((l) => l.status === 'done' && l.date.startsWith(year)),
     [lunches, year],
@@ -78,12 +84,20 @@ export default function LunchAwards({
     let cancelled = false;
     (async () => {
       try {
-        const start = `${year}-01-01`;
-        const [records, plans] = await Promise.all([
+        const start = statsStartOfYear(year); // 2026년엔 8/1부터 (그 전 기록은 거의 없음)
+        const [records, plans, kcalEntries] = await Promise.all([
           fetchAttendances(session.token, start, todayKey),
           ensureLunchPlansSchema().then(() => listLunchPlans()),
+          ensureSettingsSchema().then(() =>
+            Promise.all(
+              MEMBER_EMPNOS.map(
+                async (emp) => [emp, await getSetting(dosirakKcalKey(emp))] as const,
+              ),
+            ),
+          ),
         ]);
         if (cancelled) return;
+        const kcals = Object.fromEntries(kcalEntries.map(([emp, v]) => [emp, Number(v)]));
         const byMember = indexByMemberAndDate(records);
         const days = eachDayOfInterval({
           start: new Date(`${start}T00:00:00`),
@@ -100,6 +114,7 @@ export default function LunchAwards({
         const rank = MEMBER_EMPNOS.map((emp) => ({
           name: memberName(emp),
           days: stats.per[emp].dosirak,
+          kcal: kcals[emp] > 0 ? kcals[emp] : 0,
         })).sort((a, b) => b.days - a.days);
         if (rank[0].days <= 0) return;
         setDosirakRank(rank);
@@ -154,11 +169,14 @@ export default function LunchAwards({
       }
     }
     if (bestPlaces.length > 0) {
+      // 공동 1위가 많으면 전원 리뷰 많은 순으로 3곳까지 병기하고 나머지는 "외 n곳"
+      const shown = [...bestPlaces].sort((a, b) => b.count - a.count).slice(0, 3);
+      const rest = bestPlaces.length - shown.length;
       list.push({
         key: 'best',
         title: '최고 맛집',
         emoji: '🏅',
-        winner: bestPlaces.map((p) => p.name).join(' · '),
+        winner: shown.map((p) => p.name).join(' · ') + (rest > 0 ? ` 외 ${rest}곳` : ''),
         detail:
           `평균 ⭐ ${bestAvg.toFixed(1)}` +
           (bestPlaces.length === 1
@@ -335,7 +353,9 @@ export default function LunchAwards({
         lines: dosirakRank.map((r) => {
           // 동점자는 같은 등수 메달 (예: 45·45·30일 → 🥇🥇🥉)
           const place = dosirakRank.filter((o) => o.days > r.days).length;
-          return `${medals[place] ?? '🍙'} ${r.name} — ${r.days}일 · 약 ${(r.days * 8000).toLocaleString()}원 절약`;
+          return `${medals[place] ?? '🍙'} ${r.name} — ${r.days}일 · 약 ${(r.days * 8000).toLocaleString()}원 절약${
+            r.kcal > 0 ? ` · 약 ${(r.days * r.kcal).toLocaleString()}kcal` : ''
+          }`;
         }),
       });
     }
@@ -418,11 +438,15 @@ export default function LunchAwards({
               ))}
             </ul>
           ) : null}
-          <p className="mt-2 text-[10px] text-ink-400 break-keep">
-            올해({year}년) 다녀온 기록 기준이에요 · 최고 맛집은 참여자 전원이 별점을 남긴
-            기록만 집계해요 · 도시락왕은 도시락 리포트와 같은 규칙으로 계산해요 (연차·오전
-            반차 제외)
-          </p>
+          {/* 설명은 항목별 한 줄씩 — 모바일에서 읽기 편하게 */}
+          <ul className="mt-2 space-y-0.5 text-[10px] text-ink-400 break-keep">
+            <li>· 올해({year}년) 다녀온 기록 기준이에요</li>
+            <li>· 최고 맛집은 참여자 전원이 별점을 남긴 기록만 집계해요</li>
+            <li>
+              · 도시락왕은 도시락 리포트와 같은 규칙으로 계산해요 (연차·오전 반차 제외,
+              2026년은 8월부터 집계)
+            </li>
+          </ul>
         </>
       )}
     </section>

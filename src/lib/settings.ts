@@ -5,6 +5,9 @@ import { getDb } from './db';
 // 절약 챌린지 목표액 키 (사람별 × 연 단위)
 export const savingsGoalKey = (empNo: string, year: string) => `savings.goal.${year}.${empNo}`;
 
+// 도시락 한 끼 칼로리 키 (사람별 — 각자 먹는 도시락이 달라서 개인 설정, 연도 무관)
+export const dosirakKcalKey = (empNo: string) => `dosirak.kcal.${empNo}`;
+
 // MBTI 키 (참여자별 — 퇴사자 등 EXTRA 포함 가능)
 export const mbtiKey = (pid: string) => `mbti.${pid}`;
 

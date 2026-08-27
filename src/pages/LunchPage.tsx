@@ -742,7 +742,7 @@ function ReviewFormDialog({
         {lunch.menu ? <p className="text-[11px] text-ink-400 mt-0.5">{lunch.menu}</p> : null}
       </div>
 
-      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto">
+      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto overflow-x-hidden">
         <Field label="내 별점">
           <StarRating value={rating} onChange={setRating} size="lg" />
         </Field>
@@ -950,7 +950,7 @@ function RecordForm({
 
   return (
     <ModalShell title={title} onClose={onClose}>
-      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto">
+      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto overflow-x-hidden">
         <Field label="분류">
           <div className="grid grid-cols-2 gap-2">
             {(['lunch', 'dinner'] as MealType[]).map((key) => {
@@ -1143,7 +1143,7 @@ function PromoteFormDialog({
         {lunch.menu ? <p className="text-[11px] text-ink-400 mt-0.5">{lunch.menu}</p> : null}
       </div>
 
-      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto">
+      <form onSubmit={submit} className="p-5 space-y-4 overflow-y-auto overflow-x-hidden">
         <Field label="다녀온 날짜">
           <input
             type="date"

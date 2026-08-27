@@ -331,10 +331,12 @@ export default function MapPage() {
         </div>
       ) : null}
 
-      <p className="mt-3 text-[10px] text-ink-400 break-keep">
-        좌표가 지정된 가게만 표시돼요 (없는 곳은 생략) · 🍜 점심 다녀온 곳 · 🌙 저녁만 간 곳 ·
-        핀의 숫자는 다녀온 횟수, 누르면 상세가 보여요
-      </p>
+      {/* 설명은 항목별 한 줄씩 — 모바일에서 읽기 편하게 */}
+      <ul className="mt-3 space-y-0.5 text-[10px] text-ink-400 break-keep">
+        <li>· 좌표가 지정된 가게만 표시돼요 (없는 곳은 생략)</li>
+        <li>· 🍜 점심 다녀온 곳 · 🌙 저녁만 간 곳</li>
+        <li>· 핀의 숫자는 다녀온 횟수, 누르면 상세가 보여요</li>
+      </ul>
     </div>
   );
 }

@@ -9,6 +9,17 @@ import { MEMBER_EMPNOS, type MemberEmpNo } from './members';
 // 캘린더/통계 공용 헬퍼 — 원래 CalendarPage 안에 있던 계산을
 // 먹기록 탭의 연간 어워드에서도 쓰기 위해 분리했다.
 
+// 근태 기반 도시락 집계(도시락왕·절약 챌린지)의 시작 하한 —
+// 2026년 8월 전엔 기록이 거의 없어 도시락 일수가 부풀려지므로 항상 이 날짜부터 계산.
+// ⚠ 먹기록 자체(어워드 등)는 하한 없이 그대로 집계 — 기록이 있으면 포함한다.
+export const STATS_START = '2026-08-01';
+
+// 그해의 집계 시작일: 연초와 STATS_START 중 늦은 쪽 (2027년부터는 자연히 1/1)
+export function statsStartOfYear(year: string): string {
+  const jan1 = `${year}-01-01`;
+  return jan1 > STATS_START ? jan1 : STATS_START;
+}
+
 // 가게명 비교용 정규화 — 공백/대소문자 차이는 같은 가게로 본다 (단골 뱃지·어워드·월간 결산 공용)
 export function normalizeRestaurant(name: string): string {
   return name.replace(/\s+/g, '').toLowerCase();
