@@ -233,8 +233,8 @@ export default function DatePanel({
                       </span>
                     )}
                     {lunchChip ? (
-                      isExtra || empNo !== myEmpNo ? (
-                        // 남의 라벨은 표시만 — 토글은 내 것만 가능
+                      isExtra || !myEmpNo ? (
+                        // 게스트(내 사번 없음)와 EXTRA 인물의 라벨은 표시만
                         <span
                           className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${lunchChip.cls}`}
                           title={lunchChip.title}
@@ -242,7 +242,7 @@ export default function DatePanel({
                           {lunchChip.text}
                         </span>
                       ) : (
-                        // 클릭하면 도시락 ↔ 약속 토글
+                        // 클릭하면 도시락 ↔ 약속 토글 — 멤버라면 다른 사람 것도 대신 바꿔줄 수 있음
                         <button
                           type="button"
                           onClick={(e) => {
@@ -541,7 +541,8 @@ function LunchPlanSection({
       ) : !dayLunch && myEmpNo ? (
         // 쪼물런치 날엔 토글이 없으므로 안내도 숨김
         <p className="text-[10px] text-ink-400">
-          💡 내 점심 라벨을 누르면 🍱 도시락 ↔ 🍽️ 약속으로 바뀌어요
+          💡 점심 라벨을 누르면 🍱 도시락 ↔ 🍽️ 약속으로 바뀌어요 (다른 사람 것도 대신 바꿔줄 수
+          있어요)
         </p>
       ) : null}
 

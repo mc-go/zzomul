@@ -40,7 +40,7 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
   - `reports` — 오늘의 보고 (date + author_id UNIQUE, 하루 1건 upsert)
   - `report_comments` — 보고 댓글 (report_id + author_id UNIQUE, 1인 1댓글 upsert, 본인 보고엔 불가)
   - `anniversaries` — 기념일 (kind: birthday/hire/wedding/custom, repeat: yearly/every100days/once, remind_days JSON)
-  - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note, skipped) — 캘린더에 🍽️ 뱃지, DatePanel에서 본인 것만 등록/삭제. skipped=1은 고정 약속을 그날만 쉬어가는 표시
+  - `lunch_plans` — 개인 점심 약속 (emp_no + date PK, note, skipped) — 캘린더에 🍽️ 뱃지, DatePanel 라벨 토글(🍱↔🍽️)은 멤버면 남의 것도 대신 가능, 약속 메모 수정/삭제는 본인 것만. skipped=1은 고정 약속을 그날만 쉬어가는 표시
   - `balance_votes` — 오늘의 밸런스 게임 투표 (date + voter_id PK, choice 'a'/'b') — 1인 1표 upsert. 질문 자체는 저장 안 함(날짜 시드로 결정적, `src/lib/balance.ts`)
   - `places` — 가게 좌표 (name_key PK = normalizeRestaurant 결과, name, lat, lng) — 지도 탭 핀용. 좌표 없는 가게는 지도에서 생략
   - `settings` — 팀 공유 키-값 (key PK) — 예: 절약 챌린지 목표액 `savings.goal.{연도}.{사번}`, 도시락 한 끼 칼로리 `dosirak.kcal.{사번}`(연도 무관)
