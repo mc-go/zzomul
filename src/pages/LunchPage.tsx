@@ -418,26 +418,8 @@ function WishlistSection({
                   {item.menu ? (
                     <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{item.menu}</p>
                   ) : null}
-                  <div className="border-t border-ink-100 my-3" />
-                  {item.participants.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {item.participants.map((id) => (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
-                        >
-                          <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
-                          {memberName(id)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <CreatorLine
-                    createdBy={item.createdBy}
-                    memberName={memberName}
-                    getProfile={getProfile}
-                  />
                 </div>
+                {/* 다녀왔어요·수정·삭제는 상단에만 — 아래 참여자는 카드 전체 폭 사용 */}
                 <div className="flex flex-col items-end gap-1.5">
                   <button
                     type="button"
@@ -470,6 +452,25 @@ function WishlistSection({
                   </div>
                 </div>
               </div>
+              <div className="border-t border-ink-100 my-3" />
+              {item.participants.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {item.participants.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
+                    >
+                      <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
+                      {memberName(id)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <CreatorLine
+                createdBy={item.createdBy}
+                memberName={memberName}
+                getProfile={getProfile}
+              />
             </li>
           ))}
         </ul>
@@ -595,65 +596,8 @@ function DoneSection({
                     {lunch.menu ? (
                       <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{lunch.menu}</p>
                     ) : null}
-                    <div className="border-t border-ink-100 my-3" />
-                    {revs.length > 0 ? (
-                      <ul className="mt-3 space-y-1.5">
-                        {revs.map((r) => (
-                          <li
-                            key={r.reviewerId}
-                            className="flex items-start gap-2 rounded-md bg-ink-50/60 border border-ink-100 px-2.5 py-2"
-                          >
-                            <Avatar
-                              profile={getProfile(r.reviewerId)}
-                              size="xs"
-                              fallbackText={memberName(r.reviewerId)}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-medium text-ink-700">
-                                  {memberName(r.reviewerId)}
-                                </span>
-                                <StarRating value={r.rating} size="sm" readOnly />
-                              </div>
-                              {r.comment ? (
-                                <p className="text-xs text-ink-600 mt-0.5 whitespace-pre-wrap">
-                                  {r.comment}
-                                </p>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {canReview ? (
-                      <button
-                        type="button"
-                        onClick={() => onReview(lunch)}
-                        className="mt-3 inline-flex items-center gap-1 h-7 px-3 rounded-full border border-amber-200 bg-amber-50/60 text-amber-700 text-[11px] font-medium hover:bg-amber-100"
-                      >
-                        <LuStar className="text-xs" />
-                        {myReview ? '내 평 수정' : '평 남기기'}
-                      </button>
-                    ) : null}
-                    {lunch.participants.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {lunch.participants.map((id) => (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
-                          >
-                            <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
-                            {memberName(id)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <CreatorLine
-                      createdBy={lunch.createdBy}
-                      memberName={memberName}
-                      getProfile={getProfile}
-                    />
                   </div>
+                  {/* 수정·삭제는 상단에만 나란히 — 아래 평·참여자는 카드 전체 폭 사용 */}
                   <div className="flex items-center gap-0.5">
                     <button
                       type="button"
@@ -675,6 +619,64 @@ function DoneSection({
                     </button>
                   </div>
                 </div>
+                <div className="border-t border-ink-100 my-3" />
+                {revs.length > 0 ? (
+                  <ul className="mt-3 space-y-1.5">
+                    {revs.map((r) => (
+                      <li
+                        key={r.reviewerId}
+                        className="flex items-start gap-2 rounded-md bg-ink-50/60 border border-ink-100 px-2.5 py-2"
+                      >
+                        <Avatar
+                          profile={getProfile(r.reviewerId)}
+                          size="xs"
+                          fallbackText={memberName(r.reviewerId)}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-medium text-ink-700">
+                              {memberName(r.reviewerId)}
+                            </span>
+                            <StarRating value={r.rating} size="sm" readOnly />
+                          </div>
+                          {r.comment ? (
+                            <p className="text-xs text-ink-600 mt-0.5 whitespace-pre-wrap">
+                              {r.comment}
+                            </p>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {canReview ? (
+                  <button
+                    type="button"
+                    onClick={() => onReview(lunch)}
+                    className="mt-3 inline-flex items-center gap-1 h-7 px-3 rounded-full border border-amber-200 bg-amber-50/60 text-amber-700 text-[11px] font-medium hover:bg-amber-100"
+                  >
+                    <LuStar className="text-xs" />
+                    {myReview ? '내 평 수정' : '평 남기기'}
+                  </button>
+                ) : null}
+                {lunch.participants.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {lunch.participants.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-ink-50 text-[11px] text-ink-600 border border-ink-100"
+                      >
+                        <Avatar profile={getProfile(id)} size="xs" fallbackText={memberName(id)} />
+                        {memberName(id)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <CreatorLine
+                  createdBy={lunch.createdBy}
+                  memberName={memberName}
+                  getProfile={getProfile}
+                />
               </li>
             );
           })}
@@ -1048,8 +1050,7 @@ function RecordForm({
         </Field>
 
         <Field label={isWishlist ? '함께 갈 사람' : '함께한 사람'}>
-          {/* 참여자 4명이 모바일에서도 한 줄에 들어가게 — 간격만 살짝 좁힘 */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ALL_PARTICIPANT_IDS.map((id) => {
               const active = participants.includes(id);
               return (
@@ -1057,7 +1058,7 @@ function RecordForm({
                   key={id}
                   type="button"
                   onClick={() => toggle(id)}
-                  className={`h-10 px-1 rounded-md border text-xs font-medium transition-colors ${
+                  className={`h-10 px-2 rounded-md border text-xs font-medium transition-colors ${
                     active
                       ? 'bg-ink-900 text-white border-ink-900'
                       : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
@@ -1170,8 +1171,7 @@ function PromoteFormDialog({
         </Field>
 
         <Field label="함께한 사람">
-          {/* 참여자 4명이 모바일에서도 한 줄에 들어가게 — 간격만 살짝 좁힘 */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ALL_PARTICIPANT_IDS.map((id) => {
               const active = participants.includes(id);
               return (
@@ -1179,7 +1179,7 @@ function PromoteFormDialog({
                   key={id}
                   type="button"
                   onClick={() => toggle(id)}
-                  className={`h-10 px-1 rounded-md border text-xs font-medium transition-colors ${
+                  className={`h-10 px-2 rounded-md border text-xs font-medium transition-colors ${
                     active
                       ? 'bg-ink-900 text-white border-ink-900'
                       : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
