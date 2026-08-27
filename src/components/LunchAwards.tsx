@@ -340,21 +340,36 @@ export default function LunchAwards({
       });
     }
 
-    // 🍱 도시락왕: 근태 조회가 끝난 뒤에 합류 — 전원 순위(일수·절약액)까지 표시
+    // 🍱 도시락왕: 근태 조회가 끝난 뒤에 합류 — 전원 순위, 한 줄에 일수·절약액·칼로리 함께.
+    // 우승자는 💰 절약(일수) 1위와 🔥 칼로리(일수×한 끼 kcal, 등록자만) 1위를 각각 뽑고,
+    // 같은 사람이면 한 명만, 다르면 둘 다 표시.
     if (dosirakRank) {
-      const top = dosirakRank[0].days;
-      const winners = dosirakRank.filter((r) => r.days === top).map((r) => r.name);
       const medals = ['🥇', '🥈', '🥉'];
+      const top = dosirakRank[0].days;
+      const saveWinners = dosirakRank.filter((r) => r.days === top).map((r) => r.name);
+      const kcalTotals = dosirakRank
+        .filter((r) => r.kcal > 0)
+        .map((r) => ({ name: r.name, total: r.days * r.kcal }));
+      const kcalTop = kcalTotals.length > 0 ? Math.max(...kcalTotals.map((r) => r.total)) : 0;
+      const kcalWinners =
+        kcalTop > 0 ? kcalTotals.filter((r) => r.total === kcalTop).map((r) => r.name) : [];
+      const sameWinners =
+        kcalWinners.length > 0 &&
+        saveWinners.length === kcalWinners.length &&
+        saveWinners.every((n) => kcalWinners.includes(n));
       list.push({
         key: 'dosirak',
         title: '도시락왕',
         emoji: '🍱',
-        winner: winners.join(' · '),
+        winner:
+          kcalWinners.length === 0 || sameWinners
+            ? saveWinners.join(' · ')
+            : `💰 ${saveWinners.join(' · ')} / 🔥 ${kcalWinners.join(' · ')}`,
         lines: dosirakRank.map((r) => {
           // 동점자는 같은 등수 메달 (예: 45·45·30일 → 🥇🥇🥉)
           const place = dosirakRank.filter((o) => o.days > r.days).length;
-          return `${medals[place] ?? '🍙'} ${r.name} — ${r.days}일 · 약 ${(r.days * 8000).toLocaleString()}원 절약${
-            r.kcal > 0 ? ` · 약 ${(r.days * r.kcal).toLocaleString()}kcal` : ''
+          return `${medals[place] ?? '🍙'} ${r.name} — ${r.days}일 · 💰 약 ${(r.days * 8000).toLocaleString()}원${
+            r.kcal > 0 ? ` · 🔥 약 ${(r.days * r.kcal).toLocaleString()}kcal` : ''
           }`;
         }),
       });
@@ -446,6 +461,7 @@ export default function LunchAwards({
               · 도시락왕은 도시락 리포트와 같은 규칙으로 계산해요 (연차·오전 반차 제외,
               2026년은 8월부터 집계)
             </li>
+            <li>· 🔥 칼로리는 웰빙 저금통에 한 끼 kcal를 등록한 사람만 표시돼요</li>
           </ul>
         </>
       )}
