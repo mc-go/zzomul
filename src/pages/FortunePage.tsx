@@ -168,40 +168,53 @@ export default function FortunePage() {
               </p>
               <ul className="mt-2.5 space-y-1.5">
                 {tasteMatches.map((m) => (
+                  // 첫 줄엔 페어+점수만, 라벨·기준은 둘째 줄로 — 좁은 화면에서 안 깨지게
                   <li
                     key={`${m.a}-${m.b}`}
-                    className="flex items-center flex-wrap gap-x-2 gap-y-1 rounded-xl border border-ink-100 bg-white px-3 py-2"
+                    className="rounded-xl border border-ink-100 bg-white px-3 py-2"
                   >
-                    <span className="inline-flex items-center gap-1">
-                      <Avatar
-                        profile={getProfileByEmpNo(m.a)}
-                        size="xs"
-                        fallbackText={resolveName(m.a)}
-                      />
-                      <span className="text-xs font-medium text-ink-800">{resolveName(m.a)}</span>
-                    </span>
-                    <span className="text-xs">{m.emoji}</span>
-                    <span className="inline-flex items-center gap-1">
-                      <Avatar
-                        profile={getProfileByEmpNo(m.b)}
-                        size="xs"
-                        fallbackText={resolveName(m.b)}
-                      />
-                      <span className="text-xs font-medium text-ink-800">{resolveName(m.b)}</span>
-                    </span>
-                    {m.score != null ? (
-                      <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap">
-                        <span className="text-sm font-bold text-rose-500">{m.score}%</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100">
-                          {m.label}
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 min-w-0">
+                        <Avatar
+                          profile={getProfileByEmpNo(m.a)}
+                          size="xs"
+                          fallbackText={resolveName(m.a)}
+                        />
+                        <span className="text-xs font-medium text-ink-800 truncate">
+                          {resolveName(m.a)}
                         </span>
-                        <span className="text-[10px] text-ink-300">기록 {m.shared}개</span>
                       </span>
-                    ) : (
-                      <span className="ml-auto text-[10px] text-ink-400 whitespace-nowrap">
-                        같이 별점 남긴 기록이 {m.shared}개 — 3개부터 공개돼요 🔍
+                      <span className="text-xs shrink-0">{m.emoji}</span>
+                      <span className="inline-flex items-center gap-1 min-w-0">
+                        <Avatar
+                          profile={getProfileByEmpNo(m.b)}
+                          size="xs"
+                          fallbackText={resolveName(m.b)}
+                        />
+                        <span className="text-xs font-medium text-ink-800 truncate">
+                          {resolveName(m.b)}
+                        </span>
                       </span>
-                    )}
+                      <span className="ml-auto shrink-0 text-sm font-bold text-rose-500">
+                        {m.score != null ? `${m.score}%` : '🔍'}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center flex-wrap gap-x-1.5 gap-y-0.5">
+                      {m.score != null ? (
+                        <>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100">
+                            {m.label}
+                          </span>
+                          <span className="text-[10px] text-ink-300">
+                            같이 남긴 별점 {m.shared}개 기준
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-ink-400 break-keep">
+                          같이 별점 남긴 기록이 {m.shared}개 — 3개부터 공개돼요
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

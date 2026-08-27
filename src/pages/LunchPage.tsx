@@ -1048,7 +1048,8 @@ function RecordForm({
         </Field>
 
         <Field label={isWishlist ? '함께 갈 사람' : '함께한 사람'}>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* 참여자 4명이 모바일에서도 한 줄에 들어가게 — 간격만 살짝 좁힘 */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {ALL_PARTICIPANT_IDS.map((id) => {
               const active = participants.includes(id);
               return (
@@ -1056,7 +1057,7 @@ function RecordForm({
                   key={id}
                   type="button"
                   onClick={() => toggle(id)}
-                  className={`h-10 px-2 rounded-md border text-xs font-medium transition-colors ${
+                  className={`h-10 px-1 rounded-md border text-xs font-medium transition-colors ${
                     active
                       ? 'bg-ink-900 text-white border-ink-900'
                       : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
@@ -1169,7 +1170,8 @@ function PromoteFormDialog({
         </Field>
 
         <Field label="함께한 사람">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* 참여자 4명이 모바일에서도 한 줄에 들어가게 — 간격만 살짝 좁힘 */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {ALL_PARTICIPANT_IDS.map((id) => {
               const active = participants.includes(id);
               return (
@@ -1177,7 +1179,7 @@ function PromoteFormDialog({
                   key={id}
                   type="button"
                   onClick={() => toggle(id)}
-                  className={`h-10 px-2 rounded-md border text-xs font-medium transition-colors ${
+                  className={`h-10 px-1 rounded-md border text-xs font-medium transition-colors ${
                     active
                       ? 'bg-ink-900 text-white border-ink-900'
                       : 'bg-white text-ink-600 border-ink-200 hover:border-ink-400'
