@@ -230,27 +230,60 @@ export type TasteMatch = {
   score: number | null; // 0~100 (shared가 MIN_SHARED 미만이면 null = 보류)
   emoji: string;
   label: string;
+  exact: number; // 완전히 같은 별점을 준 횟수
+  bestPlace: { name: string; avg: number } | null; // 둘의 평균 별점이 가장 높은 가게 (4.0 이상일 때만)
+  clashPlace: { name: string; diff: number } | null; // 별점 차가 가장 컸던 가게 (1점 이상 갈렸을 때만)
 };
 
 const MIN_SHARED = 3; // 같이 별점 남긴 기록이 이보다 적으면 궁합 보류
+const BEST_PLACE_MIN_AVG = 4; // "둘 다 반한 곳"으로 인정하는 페어 평균 별점 하한
+const CLASH_MIN_DIFF = 1; // "취향 갈린 곳"으로 인정하는 별점 차 하한
 
 export function computeTasteMatches(
   empNos: readonly string[],
   reviews: Record<number, LunchReview[]>,
+  lunches: Lunch[],
 ): TasteMatch[] {
+  // 가게명 표시용 — 기록 id → 가게명
+  const nameById = new Map<number, string>(lunches.map((l) => [l.id, l.restaurant]));
   const matches: TasteMatch[] = [];
   for (let i = 0; i < empNos.length; i++) {
     for (let j = i + 1; j < empNos.length; j++) {
       const a = empNos[i];
       const b = empNos[j];
       const diffs: number[] = [];
-      for (const rs of Object.values(reviews)) {
+      let exact = 0;
+      let bestPlace: TasteMatch['bestPlace'] = null;
+      let clashPlace: TasteMatch['clashPlace'] = null;
+      for (const [lunchId, rs] of Object.entries(reviews)) {
         const ra = rs.find((r) => r.reviewerId === a && r.rating > 0);
         const rb = rs.find((r) => r.reviewerId === b && r.rating > 0);
-        if (ra && rb) diffs.push(Math.abs(ra.rating - rb.rating));
+        if (!ra || !rb) continue;
+        const diff = Math.abs(ra.rating - rb.rating);
+        diffs.push(diff);
+        if (diff === 0) exact += 1;
+        const name = nameById.get(Number(lunchId));
+        if (!name) continue;
+        const avg = (ra.rating + rb.rating) / 2;
+        if (avg >= BEST_PLACE_MIN_AVG && (!bestPlace || avg > bestPlace.avg)) {
+          bestPlace = { name, avg };
+        }
+        if (diff >= CLASH_MIN_DIFF && (!clashPlace || diff > clashPlace.diff)) {
+          clashPlace = { name, diff };
+        }
       }
       if (diffs.length < MIN_SHARED) {
-        matches.push({ a, b, shared: diffs.length, score: null, emoji: '🔍', label: '탐색 중' });
+        matches.push({
+          a,
+          b,
+          shared: diffs.length,
+          score: null,
+          emoji: '🔍',
+          label: '탐색 중',
+          exact: 0,
+          bestPlace: null,
+          clashPlace: null,
+        });
         continue;
       }
       // 별점 차이 평균(최대 4)을 0~100 궁합으로 환산
@@ -264,7 +297,7 @@ export function computeTasteMatches(
             : score >= 60
               ? ['🤝', '무난한 케미']
               : ['🎭', '취향 존중'];
-      matches.push({ a, b, shared: diffs.length, score, emoji, label });
+      matches.push({ a, b, shared: diffs.length, score, emoji, label, exact, bestPlace, clashPlace });
     }
   }
   // 점수 높은 페어부터 (보류는 맨 뒤)

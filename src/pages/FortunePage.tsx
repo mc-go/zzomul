@@ -79,7 +79,7 @@ export default function FortunePage() {
 
   // 입맛 궁합 — 같은 기록에 남긴 별점 차이 기반 페어 점수 (데이터 로드 전엔 숨김)
   const tasteMatches = useMemo(
-    () => (lunches ? computeTasteMatches(MEMBER_EMPNOS, reviews) : null),
+    () => (lunches ? computeTasteMatches(MEMBER_EMPNOS, reviews, lunches) : null),
     [lunches, reviews],
   );
 
@@ -168,7 +168,7 @@ export default function FortunePage() {
               </p>
               <ul className="mt-2.5 space-y-1.5">
                 {tasteMatches.map((m) => (
-                  // 첫 줄엔 페어+점수만, 라벨·기준은 둘째 줄로 — 좁은 화면에서 안 깨지게
+                  // 첫 줄엔 페어+조합 이름+점수, 기준·부가 지표(반한 곳/갈린 곳)는 아랫줄들로
                   <li
                     key={`${m.a}-${m.b}`}
                     className="rounded-xl border border-ink-100 bg-white px-3 py-2"
@@ -195,24 +195,43 @@ export default function FortunePage() {
                           {resolveName(m.b)}
                         </span>
                       </span>
-                      <span className="ml-auto shrink-0 text-sm font-bold text-rose-500">
-                        {m.score != null ? `${m.score}%` : '🔍'}
+                      <span className="ml-auto shrink-0 inline-flex items-center gap-1.5">
+                        {m.score != null ? (
+                          <>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100 whitespace-nowrap">
+                              {m.label}
+                            </span>
+                            <span className="text-sm font-bold text-rose-500">{m.score}%</span>
+                          </>
+                        ) : (
+                          <span className="text-sm">🔍</span>
+                        )}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center flex-wrap gap-x-1.5 gap-y-0.5">
+                    <div className="mt-1 space-y-0.5">
                       {m.score != null ? (
                         <>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-rose-50 text-rose-600 border-rose-100">
-                            {m.label}
-                          </span>
-                          <span className="text-[10px] text-ink-300">
+                          <p className="text-[10px] text-ink-300">
                             같이 남긴 별점 {m.shared}개 기준
-                          </span>
+                            {m.exact > 0
+                              ? ` · 🎯 완전 일치 ${m.exact}번 (${Math.round((m.exact / m.shared) * 100)}%)`
+                              : ''}
+                          </p>
+                          {m.bestPlace ? (
+                            <p className="text-[10px] text-ink-400 break-keep">
+                              💯 둘 다 반한 곳: {m.bestPlace.name} (★{m.bestPlace.avg.toFixed(1)})
+                            </p>
+                          ) : null}
+                          {m.clashPlace ? (
+                            <p className="text-[10px] text-ink-400 break-keep">
+                              🎭 취향 갈린 곳: {m.clashPlace.name} ({m.clashPlace.diff.toFixed(1)}점 차)
+                            </p>
+                          ) : null}
                         </>
                       ) : (
-                        <span className="text-[10px] text-ink-400 break-keep">
+                        <p className="text-[10px] text-ink-400 break-keep">
                           같이 별점 남긴 기록이 {m.shared}개 — 3개부터 공개돼요
-                        </span>
+                        </p>
                       )}
                     </div>
                   </li>
