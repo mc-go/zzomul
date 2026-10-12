@@ -17,10 +17,19 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>쪼물랭</title>
-    <script type="module" crossorigin src="/zzomul/assets/index-BeMeP6iC.js"></script>
-    <link rel="stylesheet" crossorigin href="/zzomul/assets/index-FcBMjDNE.css">
+    <!-- 저장된 테마를 첫 페인트 전에 적용 (깜빡임 방지) — 키는 src/lib/theme.ts와 동일 -->
+    <script>
+      try {
+        if (localStorage.getItem('zzomul.theme.v1') === 'mono') {
+          document.documentElement.dataset.theme = 'mono';
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff');
+        }
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/zzomul/assets/index-CkyEif0h.js"></script>
+    <link rel="stylesheet" crossorigin href="/zzomul/assets/index-fKTrW03W.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>
