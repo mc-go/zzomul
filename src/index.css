@@ -18,8 +18,8 @@ body,
 }
 
 body {
-  /* 따뜻한 크림톤 배경 — 카드가 도드라져 보이게 */
-  @apply bg-[#fdfaf3] text-ink-900 font-sans antialiased;
+  /* 기본 테마는 따뜻한 크림톤 배경(카드가 도드라져 보이게), 모노 테마는 흰색 — bg-page = 테마 변수 */
+  @apply bg-page text-ink-900 font-sans antialiased;
   font-feature-settings: 'ss03', 'cv11';
 }
 
@@ -47,4 +47,64 @@ input[type='date'] {
 input[type='date']::-webkit-date-and-time-value {
   text-align: left;
   margin: 0;
+}
+
+/* 모노 테마: 지도 타일도 무채색으로 */
+:root[data-theme='mono'] .leaflet-tile-pane {
+  filter: grayscale(1);
+}
+
+/* 프로필 아바타 색 (src/lib/avatar-icons.ts의 AVATAR_COLORS) — 모노 테마는 회색 단계로 사람 구분 */
+:root {
+  --av-slate-bg: #e2e8f0;
+  --av-slate-fg: #334155;
+  --av-gray-bg: #e5e7eb;
+  --av-gray-fg: #374151;
+  --av-amber-bg: #fef3c7;
+  --av-amber-fg: #92400e;
+  --av-orange-bg: #ffedd5;
+  --av-orange-fg: #9a3412;
+  --av-rose-bg: #ffe4e6;
+  --av-rose-fg: #9f1239;
+  --av-pink-bg: #fce7f3;
+  --av-pink-fg: #9d174d;
+  --av-purple-bg: #ede9fe;
+  --av-purple-fg: #5b21b6;
+  --av-blue-bg: #dbeafe;
+  --av-blue-fg: #1e40af;
+  --av-sky-bg: #e0f2fe;
+  --av-sky-fg: #075985;
+  --av-teal-bg: #ccfbf1;
+  --av-teal-fg: #115e59;
+  --av-green-bg: #d1fae5;
+  --av-green-fg: #065f46;
+  --av-lime-bg: #ecfccb;
+  --av-lime-fg: #3f6212;
+}
+
+:root[data-theme='mono'] {
+  --av-slate-bg: #f5f5f5;
+  --av-slate-fg: #262626;
+  --av-gray-bg: #e5e5e5;
+  --av-gray-fg: #404040;
+  --av-amber-bg: #d4d4d4;
+  --av-amber-fg: #171717;
+  --av-orange-bg: #a3a3a3;
+  --av-orange-fg: #ffffff;
+  --av-rose-bg: #737373;
+  --av-rose-fg: #ffffff;
+  --av-pink-bg: #525252;
+  --av-pink-fg: #ffffff;
+  --av-purple-bg: #262626;
+  --av-purple-fg: #ffffff;
+  --av-blue-bg: #0a0a0a;
+  --av-blue-fg: #ffffff;
+  --av-sky-bg: #fafafa;
+  --av-sky-fg: #737373;
+  --av-teal-bg: #d4d4d4;
+  --av-teal-fg: #525252;
+  --av-green-bg: #404040;
+  --av-green-fg: #d4d4d4;
+  --av-lime-bg: #171717;
+  --av-lime-fg: #a3a3a3;
 }

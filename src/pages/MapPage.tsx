@@ -28,7 +28,7 @@ import { useAppData } from '../contexts/AppDataContext';
 // 지도는 Leaflet + OpenStreetMap 타일 — API 키 없이 GitHub Pages에서 동작.
 
 const DEFAULT_CENTER: [number, number] = [37.5665, 126.978]; // 핀 없을 때 서울 중심부
-const PIN_COLOR = '#a56a3a'; // tailwind pretzel
+const PIN_COLOR = 'rgb(var(--c-pretzel))'; // tailwind pretzel (테마 변수)
 
 type PlaceStat = {
   name: string;
@@ -233,7 +233,7 @@ export default function MapPage() {
         btn.type = 'button';
         btn.textContent = '핀 삭제';
         btn.style.cssText =
-          'margin-top:6px;font-size:10px;color:#b91c1c;text-decoration:underline;background:none;border:none;padding:0;cursor:pointer;';
+          'margin-top:6px;font-size:10px;color:rgb(var(--c-red-700));text-decoration:underline;background:none;border:none;padding:0;cursor:pointer;';
         btn.onclick = () => {
           if (confirm(`'${s.name}' 핀을 지울까요? (먹기록은 그대로예요)`)) {
             void handleRemoveRef.current(p.nameKey);

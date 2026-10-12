@@ -63,19 +63,26 @@ export function getAvatarIcon(key: string | null | undefined): IconType {
 
 export type AvatarColor = { key: string; bg: string; fg: string };
 
+// 실제 색은 index.css의 --av-{key}-bg/fg 변수 (테마별로 다름 — 모노 테마는 회색 단계로 구분)
+const avatarColor = (key: string): AvatarColor => ({
+  key,
+  bg: `var(--av-${key}-bg)`,
+  fg: `var(--av-${key}-fg)`,
+});
+
 export const AVATAR_COLORS: AvatarColor[] = [
-  { key: 'slate', bg: '#e2e8f0', fg: '#334155' },
-  { key: 'gray', bg: '#e5e7eb', fg: '#374151' },
-  { key: 'amber', bg: '#fef3c7', fg: '#92400e' },
-  { key: 'orange', bg: '#ffedd5', fg: '#9a3412' },
-  { key: 'rose', bg: '#ffe4e6', fg: '#9f1239' },
-  { key: 'pink', bg: '#fce7f3', fg: '#9d174d' },
-  { key: 'purple', bg: '#ede9fe', fg: '#5b21b6' },
-  { key: 'blue', bg: '#dbeafe', fg: '#1e40af' },
-  { key: 'sky', bg: '#e0f2fe', fg: '#075985' },
-  { key: 'teal', bg: '#ccfbf1', fg: '#115e59' },
-  { key: 'green', bg: '#d1fae5', fg: '#065f46' },
-  { key: 'lime', bg: '#ecfccb', fg: '#3f6212' },
+  avatarColor('slate'),
+  avatarColor('gray'),
+  avatarColor('amber'),
+  avatarColor('orange'),
+  avatarColor('rose'),
+  avatarColor('pink'),
+  avatarColor('purple'),
+  avatarColor('blue'),
+  avatarColor('sky'),
+  avatarColor('teal'),
+  avatarColor('green'),
+  avatarColor('lime'),
 ];
 
 export const DEFAULT_COLOR_KEY = 'slate';

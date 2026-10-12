@@ -307,6 +307,9 @@ export default function DevInfo() {
                     빌드 결과에 Turso 토큰이 임베드됩니다 → 방문자면 소스에서 볼 수 있음
                   </li>
                   <li>사내 API 호출은 CORS 열려있는지 확인 필요</li>
+                  <li>
+                    색은 Tailwind 클래스만 — 테마(쪼물/모노)가 CSS 변수로 바꿔줘서 hex를 직접 쓰면 모노에서 안 바뀜
+                  </li>
                 </ul>
               </Section>
             </div>

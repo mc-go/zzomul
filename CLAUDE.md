@@ -80,7 +80,9 @@ npm run deploy     # 빌드 후 gh-pages 브랜치로 배포 ← 실제 배포 �
 
 ## UI 컨벤션
 
-- 색상 팔레트: `ink`(회색조) · `accent`(파랑) · `pretzel`(갈색), 배경은 크림톤(`#fdfaf3`) — tailwind.config.js 참고
+- 색상 팔레트: `ink`(회색조) · `accent`(파랑) · `pretzel`(갈색), 배경은 `bg-page`(크림톤 `#fdfaf3`) — tailwind.config.js 참고
+- **테마 2종**(헤더 ⚙️ 설정 → 테마): 쪼물(기본) / 모노(흰 배경 + 무채색). `<html data-theme="mono">`로 전환, localStorage `zzomul.theme.v1`에 브라우저별 기억(`src/lib/theme.ts`, 첫 페인트 깜빡임 방지는 index.html 인라인 스크립트). tailwind.config.js가 accent·pretzel·page와 Tailwind 기본 팔레트(red/amber/violet…)를 **CSS 변수(`--c-*`)** 로 정의하고, 모노에선 같은 단계 neutral 회색으로 치환. 아바타 색은 index.css의 `--av-*` 변수. 모노에선 배경 음식(FloatingBreads) 숨김·지도 타일 grayscale.
+  - ⚠ 색은 Tailwind 클래스로만 — hex 직접 지정(`bg-[#...]`, 인라인 style)은 모노에서 안 바뀜. 인라인이 꼭 필요하면 `rgb(var(--c-xxx))` 사용. 새 Tailwind 팔레트를 쓰면 `TW_PALETTES`에 추가
 - 모달은 LunchPage의 `ModalShell` 패턴(하단 시트 → sm 이상 중앙, `overflow-hidden` 필수) 따르기
 - 커스텀 애니메이션: wiggle/float/bake + pop·burst(팝업 팡), rise(탭 전환), starpop(별점), spinonce(로고), cloud·bob(배경 음식)
   - ⚠ 콘텐츠 래퍼에 transform이 남는 애니메이션(fill 모드) 금지 — fixed 모달의 기준점이 어긋남 (rise가 fill 없는 이유)

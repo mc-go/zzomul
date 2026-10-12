@@ -16,11 +16,17 @@ import AnniversaryManager from './AnniversaryManager';
 import SavingsGoalEditor from './SavingsGoalEditor';
 import FloatingBreads from './FloatingBreads';
 import PullToRefresh from './PullToRefresh';
+import { useTheme, type Theme } from '../lib/theme';
 
 const linkBase =
   'flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-medium transition-colors';
 const linkIdle = 'text-ink-500 hover:text-pretzel hover:bg-pretzel/5';
 const linkActive = 'text-pretzel bg-pretzel/10';
+
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: 'default', label: '쪼물' },
+  { value: 'mono', label: '모노' },
+];
 
 export default function Layout() {
   const { session, logout } = useAuth();
@@ -35,6 +41,7 @@ export default function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [annivOpen, setAnnivOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
 
   const profileId = session?.userId ? String(session.userId) : '';
   const myProfile = profileId ? getProfile(profileId) : null;
@@ -63,7 +70,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-full flex flex-col">
-      <header className="sticky top-0 z-30 bg-[#fdfaf3]/90 backdrop-blur border-b border-pretzel/10">
+      <header className="sticky top-0 z-30 bg-page/90 backdrop-blur border-b border-pretzel/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
@@ -218,6 +225,27 @@ export default function Layout() {
                         웰빙 저금통 설정
                       </button>
                     ) : null}
+                    {/* 테마 — 브라우저에 기억 (src/lib/theme.ts) */}
+                    <div className="mt-1 border-t border-ink-100 px-3 pt-2 pb-1.5">
+                      <p className="text-[11px] text-ink-400 mb-1.5">테마</p>
+                      <div className="grid grid-cols-2 gap-1 rounded-md bg-ink-50 p-0.5">
+                        {THEME_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setTheme(opt.value)}
+                            aria-pressed={theme === opt.value}
+                            className={`rounded px-2 py-1 text-xs transition-colors ${
+                              theme === opt.value
+                                ? 'bg-white text-ink-900 font-medium shadow-card'
+                                : 'text-ink-500 hover:text-ink-900'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               ) : null}
@@ -370,8 +398,8 @@ export default function Layout() {
       {/* 홈 화면 앱(standalone)에서만: 당겨서 새로고침 */}
       <PullToRefresh />
 
-      {/* 배경에 구름처럼 흘러가는 선 드로잉 빵들 */}
-      <FloatingBreads />
+      {/* 배경에 구름처럼 흘러가는 선 드로잉 빵들 (모노 테마에선 깔끔하게 생략) */}
+      {theme === 'mono' ? null : <FloatingBreads />}
 
       <DevInfo />
     </div>
