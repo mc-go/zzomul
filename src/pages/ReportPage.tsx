@@ -37,6 +37,10 @@ export default function ReportPage() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
+  // 지난 보고 인라인 수정 상태 (수정 중인 보고 id + 임시 내용)
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
 
   const myToday = useMemo(
     () => reports.find((r) => r.date === today && r.authorId === myPid) ?? null,
@@ -112,6 +116,23 @@ export default function ReportPage() {
     setDraft(report.content);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     draftRef.current?.focus();
+  }
+
+  // 지난 보고 인라인 수정 저장 — 새로 쓰는 건 당일만 가능하지만, 이미 쓴 보고는 원래 날짜로 고칠 수 있음
+  async function submitEdit(report: Report) {
+    if (editBusy || !myPid) return;
+    const content = editDraft.trim();
+    if (!content) return;
+    setEditBusy(true);
+    try {
+      await upsertReport(report.date, myPid, content);
+      setEditingId(null);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '저장 실패');
+    } finally {
+      setEditBusy(false);
+    }
   }
 
   async function handleDeleteComment(comment: ReportComment) {
@@ -221,12 +242,49 @@ export default function ReportPage() {
                         <Avatar profile={getProfileByEmpNo(r.authorId)} size="sm" fallbackText={name} />
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-medium text-ink-700">{name}</p>
-                          <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{r.content}</p>
+                          {editingId === r.id ? (
+                            <div className="mt-1.5 space-y-2">
+                              <textarea
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                rows={3}
+                                autoFocus
+                                className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-300"
+                              />
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingId(null)}
+                                  className="h-7 px-3 rounded-full border border-ink-200 text-[11px] text-ink-500 hover:bg-ink-50"
+                                >
+                                  취소
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={editBusy}
+                                  onClick={() => void submitEdit(r)}
+                                  className="h-7 px-3 rounded-full bg-ink-900 text-white text-[11px] font-medium hover:bg-ink-700 disabled:opacity-60"
+                                >
+                                  {editBusy ? '저장 중...' : '저장'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-ink-600 mt-0.5 whitespace-pre-wrap">{r.content}</p>
+                          )}
                         </div>
-                        {r.authorId === myPid && r.date === today ? (
+                        {r.authorId === myPid ? (
                           <button
                             type="button"
-                            onClick={() => startEdit(r)}
+                            onClick={() => {
+                              // 오늘 보고는 위 작성칸으로, 지난 보고는 카드 안에서 바로 수정
+                              if (r.date === today) {
+                                startEdit(r);
+                              } else {
+                                setEditingId(r.id);
+                                setEditDraft(r.content);
+                              }
+                            }}
                             className="text-ink-300 hover:text-ink-900 p-1.5 rounded hover:bg-ink-50 shrink-0"
                             aria-label="수정"
                             title="수정"
